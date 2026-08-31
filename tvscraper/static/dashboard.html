@@ -1,0 +1,1251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live feed monitor</title>
+<style>
+/* Palette roles. Light values on :root; the dark steps are declared under both
+   the OS media query and the explicit theme stamp so the toggle wins either way. */
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --plane: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --wash: rgba(11, 11, 11, 0.04);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --delta-up: #006300;
+  --delta-down: #d03b3b;
+  --diverge-pos: #2a78d6;
+  --diverge-neg: #e34948;
+  --diverge-mid: #f0efec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --plane: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --wash: rgba(255, 255, 255, 0.05);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --delta-up: #0ca30c;
+    --delta-down: #d03b3b;
+    --diverge-pos: #3987e5;
+    --diverge-neg: #e66767;
+    --diverge-mid: #383835;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --plane: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --wash: rgba(255, 255, 255, 0.05);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --delta-up: #0ca30c;
+  --delta-down: #d03b3b;
+  --diverge-pos: #3987e5;
+  --diverge-neg: #e66767;
+  --diverge-mid: #383835;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px 24px 56px;
+  background: var(--plane);
+  color: var(--text-primary);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; font-weight: 600; margin: 0 0 2px; letter-spacing: -0.005em; }
+.sub { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; }
+
+/* -- header + filter row -------------------------------------------- */
+header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.meta { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* Filters live in one row above everything they scope. */
+.filters {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  padding: 10px 12px; margin-bottom: 18px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+}
+.filters .label { font-size: 12px; color: var(--text-muted); margin-right: 2px; }
+.spacer { flex: 1 1 auto; }
+button {
+  font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+}
+button:hover { background: var(--wash); }
+button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+
+/* -- cards ----------------------------------------------------------- */
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px 16px; margin-bottom: 18px;
+}
+.grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 18px; }
+
+/* -- stat tiles ------------------------------------------------------ */
+.tile {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px 10px; min-width: 0;
+}
+.tile-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+.key { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.tile-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.tile-sym { font-size: 11px; color: var(--text-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.tile-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.tile-delta { font-size: 12px; margin-top: 1px; font-variant-numeric: tabular-nums; }
+.up { color: var(--delta-up); }
+.down { color: var(--delta-down); }
+.flat { color: var(--text-muted); }
+.tile-spark { display: block; margin-top: 8px; }
+.tile-foot { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+/* -- verification table ---------------------------------------------- */
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: nowrap; }
+th { font-weight: 600; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+tbody tr:last-child td { border-bottom: none; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 6px; align-items: baseline; }
+.icon { font-weight: 700; font-size: 11px; line-height: 1.45; flex: none; }
+.detail { color: var(--text-secondary); font-size: 11px; }
+.s-good .icon { color: var(--good); }
+.s-warning .icon { color: var(--warning); }
+.s-serious .icon { color: var(--serious); }
+.s-critical .icon { color: var(--critical); }
+.s-unknown .icon { color: var(--text-muted); }
+
+/* -- charts ---------------------------------------------------------- */
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 2px 0 10px; font-size: 12px; color: var(--text-secondary); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .swatch { width: 14px; height: 3px; border-radius: 2px; }
+.chart-wrap { position: relative; }
+.chart-wrap svg { display: block; }   /* no inline baseline gap under the plot */
+.tip {
+  /* Pinned to the origin so the hidden tooltip never sits below the SVG and
+     pushes the card into a nested scroll; JS moves it on hover. */
+  position: absolute; top: 0; left: 0;
+  pointer-events: none; z-index: 5; opacity: 0;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; color: var(--text-primary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14); min-width: 130px;
+  transition: opacity .08s linear;
+}
+.tip.on { opacity: 1; }
+.tip .row { display: flex; gap: 10px; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.tip .row .k { color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+.tip .head { font-weight: 600; margin-bottom: 4px; }
+.empty { color: var(--text-muted); font-size: 12px; padding: 26px 0; text-align: center; }
+.hint { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 10px 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--grid);
+}
+.stat { min-width: 0; }
+.stat .k { display: block; font-size: 11px; color: var(--text-muted); }
+.stat .v { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.legend span[data-pick] { cursor: pointer; }
+.legend span[data-pick]:hover { color: var(--text-primary); }
+.zoomed { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+.hidden { display: none; }
+.foot { font-size: 11px; color: var(--text-muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Live feed monitor</h1>
+  <span class="pill"><span class="dot" id="conn-dot"></span><span id="conn-text">connecting</span></span>
+  <span class="meta" id="meta"></span>
+</header>
+
+<div class="filters">
+  <span class="label">Bars</span>
+  <button data-res="30s" title="aggregated locally from the live tick stream">30s</button>
+  <button data-res="1m" aria-pressed="true">1m</button>
+  <button data-res="5m" title="aggregated from the 1-minute stream">5m</button>
+  <button data-res="15m" title="aggregated from the 1-minute stream">15m</button>
+  <span class="label" style="margin-left:14px">Window</span>
+  <button data-window="5">5m</button>
+  <button data-window="15">15m</button>
+  <button data-window="30">30m</button>
+  <button data-window="60" aria-pressed="true">1h</button>
+  <button data-window="180">3h</button>
+  <button data-window="360">6h</button>
+  <span class="spacer"></span>
+  <button id="reset-zoom" class="hidden">Reset zoom</button>
+  <button id="toggle-table" aria-pressed="false">Table view</button>
+  <button id="toggle-theme">Theme</button>
+</div>
+
+<div class="grid-kpi" id="tiles"></div>
+
+<section class="card">
+  <h2>Extraction checks</h2>
+  <p class="sub">Six independent tests per instrument. <strong>Quote vs bar</strong> is the load-bearing one &mdash; quotes and bars arrive over two separate server sessions, so agreement between them means both decode paths are correct.</p>
+  <div class="scroll"><table id="checks"></table></div>
+</section>
+
+<section class="card">
+  <h2>Relative performance</h2>
+  <p class="sub">Every instrument rebased to 100 at the start of the window, so copper at $6 and Bitcoin at $64,000 compare on one axis.</p>
+  <div class="legend" id="idx-legend"></div>
+  <div class="chart-wrap" id="idx-wrap"><div class="tip" id="idx-tip"></div></div>
+  <p class="hint" id="idx-absent"></p>
+  <p class="hint">Drag to zoom · click a line or a legend entry to load it below · double-click to reset</p>
+</section>
+
+<section class="card">
+  <h2>Return correlation</h2>
+  <p class="sub">Pearson correlation of 1-minute log returns over bars the pair shares. Always uses 1-minute bars, independent of the Bars setting above, since it needs history to be meaningful.</p>
+  <div class="chart-wrap" id="corr-wrap"><div class="tip" id="corr-tip"></div></div>
+</section>
+
+<section class="card">
+  <h2 id="detail-title">Detail</h2>
+  <p class="sub">Candlesticks with volume below. Up bars are hollow and down bars filled, so direction
+    reads without relying on colour.</p>
+  <div class="filters" style="margin-bottom:10px" id="detail-picker"></div>
+  <div class="filters" style="margin-bottom:12px">
+    <span class="label">Chart</span>
+    <button data-type="candles" aria-pressed="true">Candles</button>
+    <button data-type="line">Line</button>
+    <span class="label" style="margin-left:14px">Overlays</span>
+    <button data-overlay="vwap" aria-pressed="true">VWAP</button>
+    <button data-overlay="sma" aria-pressed="false">SMA 20</button>
+    <button data-overlay="session" aria-pressed="false">Session H/L</button>
+  </div>
+  <div class="chart-wrap" id="detail-wrap"><div class="tip" id="detail-tip"></div></div>
+  <p class="hint" id="detail-note"></p>
+  <div class="stats" id="detail-stats"></div>
+  <p class="hint">Drag to zoom · double-click to reset</p>
+</section>
+
+<section class="card hidden" id="table-card">
+  <h2>Table view</h2>
+  <p class="sub">Every plotted value as text &mdash; the accessible twin of the charts above.</p>
+  <div class="scroll"><table id="raw"></table></div>
+  <div class="scroll" style="margin-top:16px"><table id="corr-table"></table></div>
+</section>
+
+<p class="foot">Times shown in your local timezone. Data via TradingView for personal use.</p>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------- state */
+
+let FULL = null;          // last payload including bars + correlation
+let LIVE = null;          // last lightweight payload (quotes + checks)
+let WINDOW_MIN = 60;
+const RES_SECONDS = { "30s": 30, "1m": 60, "5m": 300, "15m": 900 };
+let RES = "1m";           // 30s comes from ticks; 5m/15m are rolled up from 1m
+let CHART_TYPE = "candles";
+const OVERLAY = { vwap: true, sma: false, session: false };
+let ZOOM = null;          // {t0, t1} epoch range set by dragging across a chart
+let SELECTED = "btc";
+let SHOW_TABLE = false;
+let HOVERING = false;     // pause chart redraws while the pointer is inside one
+
+const ICONS = { good: "✓", warning: "!", serious: "▲", critical: "✕", unknown: "·" };
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const seriesColor = (slot) => css("--series-" + slot);
+
+/* ------------------------------------------------------------- helpers */
+
+function fmt(value, decimals) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  });
+}
+function compact(value) {
+  if (value === null || value === undefined) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return (value / 1e9).toFixed(2) + "B";
+  if (abs >= 1e6) return (value / 1e6).toFixed(2) + "M";
+  if (abs >= 1e3) return (value / 1e3).toFixed(1) + "K";
+  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+function signed(value, decimals) {
+  if (value === null || value === undefined) return "—";
+  return (value > 0 ? "+" : "") + fmt(value, decimals);
+}
+function clockOf(epochSeconds) {
+  const opts = { hour: "2-digit", minute: "2-digit" };
+  if (RES === "30s") opts.second = "2-digit";
+  return new Date(epochSeconds * 1000).toLocaleTimeString([], opts);
+}
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function deltaClass(value) {
+  if (value === null || value === undefined || value === 0) return "flat";
+  return value > 0 ? "up" : "down";
+}
+/** The bar series for the selected resolution.
+ *  30s candles are aggregated locally because TradingView will not serve
+ *  sub-minute bars to an unentitled account, so they start empty and fill in. */
+function seriesOf(inst) {
+  const base = (RES === "30s" ? inst.micro_bars : inst.bars) || [];
+  const seconds = RES_SECONDS[RES];
+  return seconds > 60 ? aggregate(base, seconds) : base;
+}
+
+/** Roll 1-minute bars up into a coarser timeframe.
+ *  Built here rather than opened as extra chart sessions: 8 instruments x 4
+ *  timeframes would be 32 server sessions for data exactly derivable from the
+ *  1-minute stream already arriving. */
+function aggregate(bars, seconds) {
+  const out = [];
+  let cell = null;
+  for (const b of bars) {
+    const bucket = Math.floor(b.t / seconds) * seconds;
+    if (cell === null || cell.t !== bucket) {
+      cell = { t: bucket, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v || 0, closed: true };
+      out.push(cell);
+    } else {
+      cell.h = Math.max(cell.h, b.h);
+      cell.l = Math.min(cell.l, b.l);
+      cell.c = b.c;
+      cell.v += b.v || 0;
+    }
+  }
+  if (out.length) out[out.length - 1].closed = false;   // trailing bucket still filling
+  return out;
+}
+
+/** Bars inside the selected window, oldest first.
+ *
+ *  ``anchor`` is the timestamp the window is measured back from. Charts that
+ *  compare instruments must pass the shared :func:`latestAcross` value: an
+ *  instrument whose session has closed (VIX outside US cash hours) has its
+ *  newest bar hours in the past, and anchoring per-instrument would stretch the
+ *  common axis to cover it and silently align stale bars against live ones.
+ *  Single-instrument charts anchor on their own newest bar. */
+function windowed(bars, anchor) {
+  if (!bars || !bars.length) return [];
+  if (ZOOM) return bars.filter((b) => b.t >= ZOOM.t0 && b.t <= ZOOM.t1);
+  const end = anchor || bars[bars.length - 1].t;
+  return bars.filter((b) => b.t >= end - WINDOW_MIN * 60 && b.t <= end);
+}
+
+/** Newest bar timestamp across every instrument, at the current resolution. */
+function latestAcross() {
+  if (!FULL) return null;
+  let newest = 0;
+  for (const inst of FULL.instruments) {
+    const bars = seriesOf(inst);
+    if (bars.length) newest = Math.max(newest, bars[bars.length - 1].t);
+  }
+  return newest || null;
+}
+
+/** Seconds per bar at the current resolution. */
+function barSeconds() {
+  return RES_SECONDS[RES] || 60;
+}
+
+function setZoom(range) {
+  if (range) {
+    // Keep at least a few bars in view, or the charts have nothing to draw.
+    const floor = barSeconds() * 3;
+    if (range.t1 - range.t0 < floor) range.t1 = range.t0 + floor;
+  }
+  ZOOM = range;
+  document.getElementById("reset-zoom").classList.toggle("hidden", !ZOOM);
+  renderLive();
+  renderAll();
+}
+
+/**
+ * Drag-to-zoom on a plot. A drag narrower than a few pixels is treated as a
+ * click and handed to onClick instead, so the same surface does both.
+ */
+function attachBrush(wrap, hit, brush, geo, onClick) {
+  let anchor = null;
+  const xOf = (event) => event.clientX - wrap.getBoundingClientRect().left;
+  const tOf = (px) => geo.t0 + ((px - geo.pad.left) / geo.plotW) * (geo.t1 - geo.t0);
+  const clear = () => {
+    anchor = null;
+    brush.setAttribute("width", "0");
+    brush.setAttribute("opacity", "0");
+  };
+
+  hit.addEventListener("mousedown", (event) => {
+    anchor = xOf(event);
+    brush.setAttribute("opacity", "0.12");
+    event.preventDefault();
+  });
+  hit.addEventListener("mousemove", (event) => {
+    if (anchor === null) return;
+    const x = xOf(event);
+    brush.setAttribute("x", Math.min(anchor, x));
+    brush.setAttribute("width", Math.abs(x - anchor));
+  });
+  hit.addEventListener("mouseup", (event) => {
+    if (anchor === null) return;
+    const x = xOf(event), start = anchor;
+    clear();
+    if (Math.abs(x - start) >= 6) setZoom({ t0: tOf(Math.min(start, x)), t1: tOf(Math.max(start, x)) });
+    else if (onClick) onClick(x, tOf(x));
+  });
+  hit.addEventListener("mouseleave", clear);
+  hit.addEventListener("dblclick", () => setZoom(null));
+}
+/** Axis ticks on round numbers. */
+function niceTicks(min, max, target) {
+  if (!(max > min)) return [min];
+  const raw = (max - min) / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].find((m) => m * mag >= raw) * mag;
+  const out = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-6; v += step) out.push(v);
+  return out;
+}
+function svgOpen(width, height) {
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img">`;
+}
+
+/* --------------------------------------------------------------- tiles */
+
+function renderTiles(payload) {
+  const host = document.getElementById("tiles");
+  host.innerHTML = payload.instruments.map((inst) => {
+    const color = seriesColor(inst.slot);
+    const spark = sparkline(inst, color);
+    const mode = inst.delay_seconds ? `delayed ${inst.delay_seconds / 60}m` : "real-time";
+    return `<article class="tile">
+      <div class="tile-head">
+        <span class="key" style="background:${color}"></span>
+        <span class="tile-name">${escapeHtml(inst.name)}</span>
+        <span class="tile-sym">${escapeHtml(inst.symbol)}</span>
+      </div>
+      <div class="tile-value">${fmt(inst.last, inst.decimals)}</div>
+      <div class="tile-delta ${deltaClass(inst.change)}">
+        ${inst.change > 0 ? "▲" : inst.change < 0 ? "▼" : "·"}
+        ${signed(inst.change, inst.decimals)} (${signed(inst.change_pct, 2)}%)
+      </div>
+      ${spark}
+      <div class="tile-foot">
+        <span class="s-${inst.status}"><span class="icon">${ICONS[inst.status]}</span></span>
+        <span>${mode}</span>
+        <span style="margin-left:auto">${inst.ticks.toLocaleString()} ticks</span>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+/** 12-point trend line in the instrument's own hue. */
+function sparkline(inst, color) {
+  const match = FULL && FULL.instruments.find((i) => i.key === inst.key);
+  const bars = windowed(match ? seriesOf(match) : []).slice(-60);
+  const width = 176, height = 30;
+  if (bars.length < 2) return `<svg class="tile-spark" width="${width}" height="${height}"></svg>`;
+
+  const values = bars.map((b) => b.c);
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = max - min || 1;
+  const points = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * (width - 6) + 3;
+    const y = height - 4 - ((v - min) / span) * (height - 10);
+    return [x, y];
+  });
+  const path = points.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const end = points[points.length - 1];
+  return `<svg class="tile-spark" width="${width}" height="${height}" aria-hidden="true">
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${end[0].toFixed(1)}" cy="${end[1].toFixed(1)}" r="3" fill="${color}"
+            stroke="${css("--surface-1")}" stroke-width="2"/>
+  </svg>`;
+}
+
+/* -------------------------------------------------------------- checks */
+
+const CHECK_ORDER = ["feed", "fresh", "cross", "range", "spread", "bars"];
+const CHECK_TITLES = {
+  feed: "Feed", fresh: "Freshness", cross: "Quote vs bar",
+  range: "Range sanity", spread: "Spread", bars: "Bar continuity",
+};
+
+function renderChecks(payload) {
+  const head = `<thead><tr><th>Instrument</th>${
+    CHECK_ORDER.map((id) => `<th>${CHECK_TITLES[id]}</th>`).join("")}</tr></thead>`;
+
+  const rows = payload.instruments.map((inst) => {
+    const byId = Object.fromEntries(inst.checks.map((c) => [c.id, c]));
+    const cells = CHECK_ORDER.map((id) => {
+      const check = byId[id] || { status: "unknown", detail: "—" };
+      // Long details keep their parenthetical in the title attribute only.
+      const short = check.detail.split(" (")[0];
+      return `<td><div class="check s-${check.status}" title="${escapeHtml(check.detail)}">
+        <span class="icon">${ICONS[check.status]}</span>
+        <span class="detail">${escapeHtml(short)}</span></div></td>`;
+    }).join("");
+    return `<tr><td><span class="check"><span class="key" style="background:${seriesColor(inst.slot)};margin-top:5px"></span>
+      <strong>${escapeHtml(inst.name)}</strong></span></td>${cells}</tr>`;
+  }).join("");
+
+  document.getElementById("checks").innerHTML = head + `<tbody>${rows}</tbody>`;
+}
+
+/* ------------------------------------------------- indexed comparison */
+
+function renderIndexed() {
+  const wrap = document.getElementById("idx-wrap");
+  const tip = document.getElementById("idx-tip");
+  const width = Math.max(320, wrap.clientWidth);
+  const height = 320;
+  const pad = { top: 12, right: 74, bottom: 30, left: 48 };
+
+  const anchor = latestAcross();
+  const scored = FULL.instruments.map((inst) => ({ inst, points: rebase(windowed(seriesOf(inst), anchor)) }));
+  const series = scored.filter((s) => s.points.length > 1);
+  // Say which instruments have nothing in this window rather than leaving a
+  // legend entry with no line and no explanation.
+  const absent = scored.filter((s) => s.points.length <= 1).map((s) => s.inst.name);
+  document.getElementById("idx-absent").textContent = absent.length
+    ? `No bars in this window: ${absent.join(", ")} — that session is closed.` : "";
+
+  document.getElementById("idx-legend").innerHTML = FULL.instruments.map((inst) =>
+    `<span data-pick="${inst.key}" title="Show ${escapeHtml(inst.name)} in detail below">
+       <span class="swatch" style="background:${seriesColor(inst.slot)}"></span>${escapeHtml(inst.name)}</span>`
+  ).join("");
+  document.querySelectorAll("#idx-legend [data-pick]").forEach((node) => {
+    node.addEventListener("click", () => showDetail(node.dataset.pick));
+  });
+
+  if (!series.length) {
+    wrap.innerHTML = `<div class="empty">${emptyNote()}</div>`;
+    wrap.appendChild(tip);
+    return;
+  }
+
+  const allT = series.flatMap((s) => s.points.map((p) => p.t));
+  const allV = series.flatMap((s) => s.points.map((p) => p.v));
+  const t0 = Math.min(...allT), t1 = Math.max(...allT);
+  let vMin = Math.min(...allV), vMax = Math.max(...allV);
+  const padV = (vMax - vMin) * 0.12 || 0.5;
+  vMin -= padV; vMax += padV;
+
+  const x = (t) => pad.left + ((t - t0) / (t1 - t0 || 1)) * (width - pad.left - pad.right);
+  const y = (v) => pad.top + (1 - (v - vMin) / (vMax - vMin || 1)) * (height - pad.top - pad.bottom);
+
+  let out = svgOpen(width, height);
+
+  // Recessive hairline grid, solid.
+  for (const tick of niceTicks(vMin, vMax, 5)) {
+    const py = y(tick).toFixed(1);
+    out += `<line x1="${pad.left}" y1="${py}" x2="${width - pad.right}" y2="${py}" stroke="${css("--grid")}" stroke-width="1"/>`;
+    out += `<text x="${pad.left - 8}" y="${py}" text-anchor="end" dominant-baseline="middle"
+             font-size="11" fill="${css("--text-muted")}">${tick.toFixed(1)}</text>`;
+  }
+  // The 100 baseline is the reference the whole chart is read against.
+  out += `<line x1="${pad.left}" y1="${y(100).toFixed(1)}" x2="${width - pad.right}" y2="${y(100).toFixed(1)}"
+           stroke="${css("--axis")}" stroke-width="1"/>`;
+
+  const ticks = timeTicks(t0, t1, Math.max(3, Math.floor(width / 110)));
+  ticks.forEach((t, i) => {
+    out += axisLabel(clockOf(t), x(t), height - 10, i, ticks.length);
+  });
+
+  for (const s of series) {
+    const d = s.points.map((p, i) => (i ? "L" : "M") + x(p.t).toFixed(1) + " " + y(p.v).toFixed(1)).join(" ");
+    out += `<path d="${d}" fill="none" stroke="${seriesColor(s.inst.slot)}" stroke-width="2"
+             stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+
+  // Direct end labels, de-collided with leader lines rather than stacked.
+  const labels = series.map((s) => {
+    const last = s.points[s.points.length - 1];
+    return { inst: s.inst, anchor: y(last.v), x: x(last.t), value: last.v, y: y(last.v) };
+  }).sort((a, b) => a.anchor - b.anchor);
+  spreadLabels(labels, 14, pad.top, height - pad.bottom);
+
+  for (const label of labels) {
+    const lx = width - pad.right + 6;
+    out += `<circle cx="${label.x.toFixed(1)}" cy="${label.anchor.toFixed(1)}" r="4"
+             fill="${seriesColor(label.inst.slot)}" stroke="${css("--surface-1")}" stroke-width="2"/>`;
+    if (Math.abs(label.y - label.anchor) > 1) {
+      out += `<path d="M${label.x.toFixed(1)} ${label.anchor.toFixed(1)} L${(lx - 4).toFixed(1)} ${label.y.toFixed(1)}"
+               fill="none" stroke="${css("--axis")}" stroke-width="1"/>`;
+    }
+    out += `<text x="${lx}" y="${label.y.toFixed(1)}" dominant-baseline="middle" font-size="11"
+             fill="${css("--text-secondary")}">${label.value.toFixed(2)}</text>`;
+  }
+
+  out += `<rect id="idx-brush" x="0" y="${pad.top}" width="0" height="${height - pad.top - pad.bottom}"
+           fill="${css("--text-primary")}" opacity="0" pointer-events="none"/>`;
+  out += `<rect id="idx-hit" x="${pad.left}" y="${pad.top}" width="${width - pad.left - pad.right}"
+           height="${height - pad.top - pad.bottom}" fill="transparent" style="cursor:crosshair"/>`;
+  out += `<line id="idx-cross" x1="0" y1="${pad.top}" x2="0" y2="${height - pad.bottom}"
+           stroke="${css("--axis")}" stroke-width="1" opacity="0"/></svg>`;
+
+  wrap.innerHTML = out;
+  wrap.appendChild(tip);
+  const geo = { x, y, t0, t1, pad, width, height, plotW: width - pad.left - pad.right };
+  attachCrosshair(wrap, tip, series, geo);
+  // A plain click picks the series nearest the pointer and loads it below.
+  attachBrush(wrap, wrap.querySelector("#idx-hit"), wrap.querySelector("#idx-brush"), geo,
+    (px, t) => {
+      let best = null, bestGap = Infinity;
+      for (const s of series) {
+        const point = nearest(s.points, t);
+        if (!point) continue;
+        const gap = Math.abs(y(point.v) - lastPointerY);
+        if (gap < bestGap) { bestGap = gap; best = s.inst.key; }
+      }
+      if (best) showDetail(best);
+    });
+}
+
+/** Rebase a bar window to 100 at its first close. */
+function rebase(bars) {
+  if (!bars.length || !bars[0].c) return [];
+  const base = bars[0].c;
+  return bars.map((b) => ({ t: b.t, v: (b.c / base) * 100, c: b.c }));
+}
+
+/** Push overlapping end-labels apart, keeping their order, inside the plot. */
+function spreadLabels(labels, minGap, top, bottom) {
+  for (let i = 1; i < labels.length; i++) {
+    if (labels[i].y - labels[i - 1].y < minGap) labels[i].y = labels[i - 1].y + minGap;
+  }
+  const overflow = labels.length ? labels[labels.length - 1].y - bottom : 0;
+  if (overflow > 0) for (const l of labels) l.y -= overflow;
+  for (let i = labels.length - 2; i >= 0; i--) {
+    if (labels[i + 1].y - labels[i].y < minGap) labels[i].y = labels[i + 1].y - minGap;
+  }
+  for (const l of labels) l.y = Math.max(top + 6, Math.min(bottom - 6, l.y));
+}
+
+/** 30s candles have no backfill, so say so rather than looking broken. */
+function emptyNote() {
+  return RES === "30s"
+    ? "Building 30-second candles from the live tick stream…"
+    : "Waiting for bar history…";
+}
+
+function timeTicks(t0, t1, count) {
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(t0 + ((t1 - t0) * i) / (count - 1 || 1));
+  return out;
+}
+
+/** Axis tick text. The end ticks anchor inward so they never overhang the plot. */
+function axisLabel(text, x, y, index, total) {
+  const anchor = index === 0 ? "start" : index === total - 1 ? "end" : "middle";
+  return `<text x="${x.toFixed(1)}" y="${y}" text-anchor="${anchor}" font-size="11"
+           fill="${css("--text-muted")}">${text}</text>`;
+}
+
+function attachCrosshair(wrap, tip, series, geo) {
+  const hit = wrap.querySelector("#idx-hit");
+  const cross = wrap.querySelector("#idx-cross");
+  if (!hit) return;
+
+  hit.addEventListener("mousemove", (event) => {
+    const box = wrap.getBoundingClientRect();
+    const px = event.clientX - box.left;
+    lastPointerY = event.clientY - box.top;
+    const ratio = (px - geo.pad.left) / (geo.width - geo.pad.left - geo.pad.right);
+    const t = geo.t0 + ratio * (geo.t1 - geo.t0);
+
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("opacity", "1");
+
+    const rows = series.map((s) => {
+      const point = nearest(s.points, t);
+      return point
+        ? `<div class="row"><span class="k"><span class="swatch" style="width:12px;height:3px;border-radius:2px;background:${seriesColor(s.inst.slot)}"></span>${escapeHtml(s.inst.name)}</span>
+           <span>${point.v.toFixed(2)}</span></div>`
+        : "";
+    }).join("");
+
+    tip.innerHTML = `<div class="head">${clockOf(t)}</div>${rows}`;
+    tip.classList.add("on");
+    const left = Math.min(px + 16, wrap.clientWidth - tip.offsetWidth - 8);
+    tip.style.left = Math.max(4, left) + "px";
+    tip.style.top = "10px";
+  });
+  hit.addEventListener("mouseleave", () => {
+    tip.classList.remove("on");
+    cross.setAttribute("opacity", "0");
+  });
+}
+
+let lastPointerY = 0;   // set on crosshair move; lets a click resolve a series
+
+/** Load an instrument into the detail chart and bring it into view. */
+function showDetail(key) {
+  SELECTED = key;
+  renderDetail();
+  document.getElementById("detail-title").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function nearest(points, t) {
+  let best = null, bestDelta = Infinity;
+  for (const p of points) {
+    const delta = Math.abs(p.t - t);
+    if (delta < bestDelta) { bestDelta = delta; best = p; }
+  }
+  return best;
+}
+
+/* ------------------------------------------------------- correlation */
+
+function renderCorrelation() {
+  const wrap = document.getElementById("corr-wrap");
+  const tip = document.getElementById("corr-tip");
+  const corr = FULL.correlation;
+  const names = Object.fromEntries(FULL.instruments.map((i) => [i.key, i.name]));
+  const size = corr.keys.length;
+
+  const width = Math.max(280, wrap.clientWidth);
+  const left = 74, top = 66, gap = 2;   // top clears the diagonal column headers
+  const cell = Math.max(28, Math.min(64, (width - left - 8) / size));
+  const height = top + cell * size + 8;
+
+  let out = svgOpen(width, height);
+
+  corr.keys.forEach((key, i) => {
+    // Anchored at the end and rotated +45deg, the label runs up-and-left from its
+    // column, so the rightmost header cannot overhang the plot.
+    const cx = left + i * cell + cell / 2, cy = top - 8;
+    out += `<text x="${cx}" y="${cy}" text-anchor="end" font-size="11"
+             fill="${css("--text-muted")}" transform="rotate(45 ${cx} ${cy})">${escapeHtml(names[key])}</text>`;
+    out += `<text x="${left - 8}" y="${top + i * cell + cell / 2}" text-anchor="end" dominant-baseline="middle"
+             font-size="11" fill="${css("--text-secondary")}">${escapeHtml(names[key])}</text>`;
+  });
+
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const rho = corr.matrix[r][c];
+      const n = corr.counts[r][c];
+      const x = left + c * cell, y = top + r * cell;
+      const fill = rho === null ? css("--wash") : divergingColor(rho);
+      const label = rho === null ? "n/a" : rho.toFixed(2);
+      const ink = rho === null ? css("--text-muted") : (Math.abs(rho) > 0.55 ? "#ffffff" : css("--text-primary"));
+      out += `<rect class="corr-cell" data-r="${r}" data-c="${c}" x="${x + gap / 2}" y="${y + gap / 2}"
+               width="${cell - gap}" height="${cell - gap}" rx="3" fill="${fill}"/>`;
+      out += `<text x="${x + cell / 2}" y="${y + cell / 2}" text-anchor="middle" dominant-baseline="middle"
+               font-size="11" fill="${ink}" pointer-events="none">${label}</text>`;
+      void n;
+    }
+  }
+  out += "</svg>";
+  wrap.innerHTML = out;
+  wrap.appendChild(tip);
+
+  wrap.querySelectorAll(".corr-cell").forEach((rect) => {
+    rect.addEventListener("mousemove", (event) => {
+      const r = +rect.dataset.r, c = +rect.dataset.c;
+      const rho = corr.matrix[r][c], n = corr.counts[r][c];
+      const box = wrap.getBoundingClientRect();
+      tip.innerHTML = `<div class="head">${escapeHtml(names[corr.keys[r]])} ↔ ${escapeHtml(names[corr.keys[c]])}</div>
+        <div class="row"><span class="k">correlation</span><span>${rho === null ? "not enough data" : rho.toFixed(3)}</span></div>
+        <div class="row"><span class="k">shared bars</span><span>${n}</span></div>
+        ${rho === null ? `<div class="row"><span class="k">needs</span><span>${corr.min_points}+</span></div>` : ""}`;
+      tip.classList.add("on");
+      tip.style.left = Math.max(4, Math.min(event.clientX - box.left + 14, wrap.clientWidth - tip.offsetWidth - 6)) + "px";
+      tip.style.top = Math.max(4, event.clientY - box.top - 10) + "px";
+    });
+    rect.addEventListener("mouseleave", () => tip.classList.remove("on"));
+  });
+}
+
+/** Diverging scale: blue for positive, red for negative, neutral gray at zero. */
+function divergingColor(rho) {
+  const mid = hexToRgb(css("--diverge-mid"));
+  const pole = hexToRgb(rho >= 0 ? css("--diverge-pos") : css("--diverge-neg"));
+  const k = Math.min(1, Math.abs(rho));
+  const mix = mid.map((m, i) => Math.round(m + (pole[i] - m) * k));
+  return `rgb(${mix.join(",")})`;
+}
+function hexToRgb(hex) {
+  const h = hex.replace("#", "").trim();
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+}
+
+/* ------------------------------------------------------ detail chart */
+
+function renderDetail() {
+  const picker = document.getElementById("detail-picker");
+  picker.innerHTML = FULL.instruments.map((inst) =>
+    `<button data-detail="${inst.key}" aria-pressed="${inst.key === SELECTED}">
+       <span class="key" style="background:${seriesColor(inst.slot)};display:inline-block;margin-right:6px"></span>${escapeHtml(inst.name)}
+     </button>`).join("");
+  picker.querySelectorAll("[data-detail]").forEach((button) => {
+    button.addEventListener("click", () => { SELECTED = button.dataset.detail; renderDetail(); });
+  });
+
+  const inst = FULL.instruments.find((i) => i.key === SELECTED) || FULL.instruments[0];
+  document.getElementById("detail-title").textContent = `${inst.name} · ${inst.symbol}`;
+
+  const wrap = document.getElementById("detail-wrap");
+  const tip = document.getElementById("detail-tip");
+  const note = document.getElementById("detail-note");
+  const bars = windowed(seriesOf(inst));
+  if (bars.length < 2) {
+    wrap.innerHTML = `<div class="empty">${emptyNote()}</div>`;
+    wrap.appendChild(tip);
+    note.textContent = "";
+    renderDetailStats(inst, bars);
+    return;
+  }
+
+  const width = Math.max(320, wrap.clientWidth);
+  const height = 400, volHeight = 62;
+  const pad = { top: 12, right: 68, bottom: 30, left: 10 };
+  const plotW = width - pad.left - pad.right;
+  const priceBottom = height - pad.bottom - volHeight - 14;
+  const d = inst.decimals;
+
+  const color = seriesColor(inst.slot);
+  const up = css("--good"), down = css("--critical");
+  const surface = css("--surface-1"), muted = css("--text-muted");
+
+  // The hollow/filled distinction is what makes direction readable without
+  // colour, and it needs a visible interior: a 1.25px stroke on each side means
+  // the body must be at least ~4px wide, so ~6px per bar. Below that, fall back
+  // to a line and say so rather than drawing a smear that encodes nothing.
+  const slot = plotW / bars.length;
+  const tooDense = slot < 6;
+  const drawCandles = CHART_TYPE === "candles" && !tooDense;
+  note.textContent = (CHART_TYPE === "candles" && tooDense)
+    ? `${bars.length} bars is too many to draw as candles at this width - showing a line. Zoom in or pick a coarser timeframe.`
+    : "";
+
+  let vMin = Math.min(...bars.map((b) => b.l));
+  let vMax = Math.max(...bars.map((b) => b.h));
+  if (OVERLAY.session && inst.low != null && inst.high != null) {
+    vMin = Math.min(vMin, inst.low); vMax = Math.max(vMax, inst.high);
+  }
+  const padV = (vMax - vMin) * 0.08 || Math.abs(vMax) * 0.001 || 1;
+  vMin -= padV; vMax += padV;
+
+  const volMax = Math.max(...bars.map((b) => b.v || 0)) || 1;
+  const t0 = bars[0].t, t1 = bars[bars.length - 1].t;
+  const x = (t) => pad.left + ((t - t0) / (t1 - t0 || 1)) * plotW;
+  const y = (v) => pad.top + (1 - (v - vMin) / (vMax - vMin || 1)) * (priceBottom - pad.top);
+  const vy = (v) => height - pad.bottom - (v / volMax) * volHeight;
+
+  let out = svgOpen(width, height);
+
+  for (const tick of niceTicks(vMin, vMax, 5)) {
+    const py = y(tick).toFixed(1);
+    out += `<line x1="${pad.left}" y1="${py}" x2="${width - pad.right}" y2="${py}" stroke="${css("--grid")}" stroke-width="1"/>`;
+    out += `<text x="${width - pad.right + 8}" y="${py}" dominant-baseline="middle" font-size="11"
+             fill="${muted}">${fmt(tick, d)}</text>`;
+  }
+
+  if (OVERLAY.session) {
+    for (const [label, value] of [["session high", inst.high], ["session low", inst.low]]) {
+      if (value == null) continue;
+      const py = y(value);
+      out += `<line x1="${pad.left}" y1="${py.toFixed(1)}" x2="${width - pad.right}" y2="${py.toFixed(1)}"
+               stroke="${css("--axis")}" stroke-width="1"/>`;
+      out += `<text x="${pad.left + 4}" y="${(py - 4).toFixed(1)}" font-size="10" fill="${muted}">${label}</text>`;
+    }
+  }
+
+  // Volume, coloured by the direction of its own bar.
+  const barWidth = Math.max(1, Math.min(24, slot - 2));
+  for (const b of bars) {
+    const h = height - pad.bottom - vy(b.v || 0);
+    if (h <= 0) continue;
+    out += `<rect x="${(x(b.t) - barWidth / 2).toFixed(1)}" y="${vy(b.v || 0).toFixed(1)}"
+             width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}"
+             fill="${b.c >= b.o ? up : down}" fill-opacity="0.32"/>`;
+  }
+
+  if (drawCandles) {
+    // Hollow up / filled down. The fill carries direction on its own, so the
+    // chart stays readable for red-green colour blindness, where this pair
+    // measures only dE 4.1 apart and colour alone would not survive.
+    const bodyW = Math.max(1, Math.min(20, slot - 2));
+    for (const b of bars) {
+      const cx = x(b.t), rising = b.c >= b.o;
+      const stroke = rising ? up : down;
+      const top = Math.min(y(b.o), y(b.c));
+      const bodyH = Math.max(1, Math.abs(y(b.c) - y(b.o)));
+      out += `<line x1="${cx.toFixed(1)}" y1="${y(b.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(b.l).toFixed(1)}"
+               stroke="${stroke}" stroke-width="1"/>`;
+      out += `<rect x="${(cx - bodyW / 2).toFixed(1)}" y="${top.toFixed(1)}"
+               width="${bodyW.toFixed(1)}" height="${bodyH.toFixed(1)}"
+               fill="${rising ? surface : stroke}" stroke="${stroke}" stroke-width="1.25"/>`;
+    }
+  } else {
+    const upper = bars.map((b, i) => (i ? "L" : "M") + x(b.t).toFixed(1) + " " + y(b.h).toFixed(1)).join(" ");
+    const lower = bars.slice().reverse().map((b) => "L" + x(b.t).toFixed(1) + " " + y(b.l).toFixed(1)).join(" ");
+    out += `<path d="${upper} ${lower} Z" fill="${color}" fill-opacity="0.14" stroke="none"/>`;
+    const line = bars.map((b, i) => (i ? "L" : "M") + x(b.t).toFixed(1) + " " + y(b.c).toFixed(1)).join(" ");
+    out += `<path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+
+  if (OVERLAY.vwap) {
+    let turnover = 0, volume = 0;
+    const points = [];
+    for (const b of bars) {
+      if (b.v) { turnover += ((b.h + b.l + b.c) / 3) * b.v; volume += b.v; }
+      if (volume) points.push([x(b.t), y(turnover / volume)]);
+    }
+    if (points.length > 1) {
+      const end = points[points.length - 1];
+      out += `<path d="${points.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ")}"
+               fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+      out += `<text x="${end[0].toFixed(1)}" y="${(end[1] - 6).toFixed(1)}" text-anchor="end"
+               font-size="10" fill="${muted}">VWAP</text>`;
+    }
+  }
+
+  if (OVERLAY.sma) {
+    const period = 20;
+    const points = [];
+    for (let i = period - 1; i < bars.length; i++) {
+      let total = 0;
+      for (let k = i - period + 1; k <= i; k++) total += bars[k].c;
+      points.push([x(bars[i].t), y(total / period)]);
+    }
+    if (points.length > 1) {
+      const end = points[points.length - 1];
+      out += `<path d="${points.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ")}"
+               fill="none" stroke="${muted}" stroke-width="2" stroke-linejoin="round"/>`;
+      out += `<text x="${end[0].toFixed(1)}" y="${(end[1] - 6).toFixed(1)}" text-anchor="end"
+               font-size="10" fill="${muted}">SMA 20</text>`;
+    }
+  }
+
+  // Last price: hairline plus a chip on the price axis.
+  const last = bars[bars.length - 1];
+  const lastRising = last.c >= last.o;
+  const lastY = y(last.c);
+  out += `<line x1="${pad.left}" y1="${lastY.toFixed(1)}" x2="${width - pad.right}" y2="${lastY.toFixed(1)}"
+           stroke="${lastRising ? up : down}" stroke-width="1" opacity="0.55"/>`;
+  out += `<rect x="${width - pad.right + 3}" y="${(lastY - 9).toFixed(1)}" width="${pad.right - 7}" height="18" rx="3"
+           fill="${surface}" stroke="${lastRising ? up : down}" stroke-width="1"/>`;
+  out += `<text x="${width - pad.right + 7}" y="${lastY.toFixed(1)}" dominant-baseline="middle" font-size="11"
+           fill="${css("--text-primary")}">${fmt(last.c, d)}</text>`;
+
+  out += `<line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"
+           stroke="${css("--axis")}" stroke-width="1"/>`;
+  const dticks = timeTicks(t0, t1, Math.max(3, Math.floor(width / 130)));
+  dticks.forEach((t, i) => { out += axisLabel(clockOf(t), x(t), height - 10, i, dticks.length); });
+
+  // Crosshair furniture, moved on hover rather than re-rendered.
+  out += `<g id="dx" opacity="0" pointer-events="none">
+    <line id="dx-v" y1="${pad.top}" y2="${height - pad.bottom}" stroke="${css("--axis")}" stroke-width="1"/>
+    <line id="dx-h" x1="${pad.left}" x2="${width - pad.right}" stroke="${css("--axis")}" stroke-width="1"/>
+    <rect id="dx-chip" width="${pad.right - 7}" height="18" rx="3" x="${width - pad.right + 3}"
+          fill="${css("--text-primary")}"/>
+    <text id="dx-chip-text" x="${width - pad.right + 7}" dominant-baseline="middle" font-size="11"
+          fill="${surface}"></text>
+  </g>`;
+  out += `<rect id="detail-brush" x="0" y="${pad.top}" width="0" height="${height - pad.top - pad.bottom}"
+           fill="${css("--text-primary")}" opacity="0" pointer-events="none"/>`;
+  out += `<rect id="detail-hit" x="${pad.left}" y="${pad.top}" width="${plotW}"
+           height="${height - pad.top - pad.bottom}" fill="transparent" style="cursor:crosshair"/></svg>`;
+
+  wrap.innerHTML = out;
+  wrap.appendChild(tip);
+
+  const hit = wrap.querySelector("#detail-hit");
+  const cross = wrap.querySelector("#dx");
+  hit.addEventListener("mousemove", (event) => {
+    const box = wrap.getBoundingClientRect();
+    const px = event.clientX - box.left, py = event.clientY - box.top;
+    const bar = nearest(bars, t0 + ((px - pad.left) / plotW) * (t1 - t0));
+    if (!bar) return;
+
+    const priceAt = vMin + (1 - (py - pad.top) / (priceBottom - pad.top)) * (vMax - vMin);
+    cross.setAttribute("opacity", "1");
+    wrap.querySelector("#dx-v").setAttribute("x1", x(bar.t));
+    wrap.querySelector("#dx-v").setAttribute("x2", x(bar.t));
+    wrap.querySelector("#dx-h").setAttribute("y1", py);
+    wrap.querySelector("#dx-h").setAttribute("y2", py);
+    wrap.querySelector("#dx-chip").setAttribute("y", py - 9);
+    const chipText = wrap.querySelector("#dx-chip-text");
+    chipText.setAttribute("y", py);
+    chipText.textContent = py <= priceBottom ? fmt(priceAt, d) : "";
+
+    const change = bar.c - bar.o;
+    tip.innerHTML = `<div class="head">${clockOf(bar.t)} · ${RES}</div>
+      <div class="row"><span class="k">open</span><span>${fmt(bar.o, d)}</span></div>
+      <div class="row"><span class="k">high</span><span>${fmt(bar.h, d)}</span></div>
+      <div class="row"><span class="k">low</span><span>${fmt(bar.l, d)}</span></div>
+      <div class="row"><span class="k">close</span><span>${fmt(bar.c, d)}</span></div>
+      <div class="row"><span class="k">change</span><span class="${deltaClass(change)}">${signed(change, d)}
+        (${signed(bar.o ? (change / bar.o) * 100 : 0, 2)}%)</span></div>
+      <div class="row"><span class="k">range</span><span>${fmt(bar.h - bar.l, d)}</span></div>
+      <div class="row"><span class="k">volume</span><span>${bar.v ? compact(bar.v) : "—"}</span></div>
+      <div class="row"><span class="k">state</span><span>${bar.closed ? "closed" : "forming"}</span></div>`;
+    tip.classList.add("on");
+    tip.style.left = Math.max(4, Math.min(px + 16, wrap.clientWidth - tip.offsetWidth - 6)) + "px";
+    tip.style.top = "10px";
+  });
+  hit.addEventListener("mouseleave", () => {
+    tip.classList.remove("on");
+    cross.setAttribute("opacity", "0");
+  });
+
+  attachBrush(wrap, hit, wrap.querySelector("#detail-brush"), { t0, t1, pad, plotW });
+  renderDetailStats(inst, bars);
+}
+
+/** The numeric readout under the detail chart, scoped to the visible bars. */
+function renderDetailStats(inst, bars) {
+  const host = document.getElementById("detail-stats");
+  if (!bars || !bars.length) { host.innerHTML = ""; return; }
+
+  const d = inst.decimals;
+  const first = bars[0], last = bars[bars.length - 1];
+  let hi = bars[0], lo = bars[0], volume = 0, turnover = 0;
+  for (const b of bars) {
+    if (b.h > hi.h) hi = b;
+    if (b.l < lo.l) lo = b;
+    if (b.v) { volume += b.v; turnover += ((b.h + b.l + b.c) / 3) * b.v; }
+  }
+  const change = last.c - first.o;
+  const changePct = first.o ? (change / first.o) * 100 : null;
+  const vwap = volume ? turnover / volume : null;
+  const spread = (inst.bid && inst.ask) ? ((inst.ask - inst.bid) / inst.ask) * 10_000 : null;
+  const unit = RES;
+
+  const items = [
+    ["Bars", `${bars.length} × ${unit}`],
+    ["From", clockOf(first.t)],
+    ["To", clockOf(last.t)],
+    ["Open", fmt(first.o, d)],
+    ["High", fmt(hi.h, d)],
+    ["High at", clockOf(hi.t)],
+    ["Low", fmt(lo.l, d)],
+    ["Low at", clockOf(lo.t)],
+    ["Close", fmt(last.c, d)],
+    ["Change", signed(change, d), deltaClass(change)],
+    ["Change %", changePct === null ? "—" : signed(changePct, 2) + "%", deltaClass(change)],
+    ["Range", fmt(hi.h - lo.l, d)],
+    // Index feeds such as VIX carry no volume, so these stay blank by design.
+    ["Volume", volume ? compact(volume) : "—"],
+    ["VWAP", vwap === null ? "—" : fmt(vwap, d)],
+    ["Bid", inst.bid ? fmt(inst.bid, d) : "—"],
+    ["Ask", inst.ask ? fmt(inst.ask, d) : "—"],
+    ["Spread", spread === null ? "—" : spread.toFixed(1) + " bps"],
+    ["Ann. vol", inst.realized_vol_pct == null ? "—" : inst.realized_vol_pct.toFixed(1) + "%"],
+    ["Session low", inst.low == null ? "—" : fmt(inst.low, d)],
+    ["Session high", inst.high == null ? "—" : fmt(inst.high, d)],
+    ["Ticks", inst.ticks.toLocaleString()],
+  ];
+  host.innerHTML = items.map(([k, v, cls]) =>
+    `<div class="stat"><span class="k">${k}</span><span class="v ${cls || ""}">${v}</span></div>`).join("");
+}
+
+/* ---------------------------------------------------------- table view */
+
+function renderTables() {
+  const payload = LIVE || FULL;
+  const head = ["Instrument", "Symbol", "Last", "Change", "Change %", "Bid", "Ask", "Open", "High", "Low",
+    "Prev close", "Volume", "Range pos", "Ann. vol %", "Bars", "Ticks", "Feed"];
+  const rows = payload.instruments.map((inst) => `<tr>
+    <td><span class="check"><span class="key" style="background:${seriesColor(inst.slot)};margin-top:5px"></span>${escapeHtml(inst.name)}</span></td>
+    <td>${escapeHtml(inst.symbol)}</td>
+    <td class="num">${fmt(inst.last, inst.decimals)}</td>
+    <td class="num ${deltaClass(inst.change)}">${signed(inst.change, inst.decimals)}</td>
+    <td class="num ${deltaClass(inst.change_pct)}">${signed(inst.change_pct, 2)}</td>
+    <td class="num">${fmt(inst.bid, inst.decimals)}</td>
+    <td class="num">${fmt(inst.ask, inst.decimals)}</td>
+    <td class="num">${fmt(inst.open, inst.decimals)}</td>
+    <td class="num">${fmt(inst.high, inst.decimals)}</td>
+    <td class="num">${fmt(inst.low, inst.decimals)}</td>
+    <td class="num">${fmt(inst.prev_close, inst.decimals)}</td>
+    <td class="num">${compact(inst.volume)}</td>
+    <td class="num">${inst.range_position === null ? "—" : (inst.range_position * 100).toFixed(0) + "%"}</td>
+    <td class="num">${inst.realized_vol_pct === null ? "—" : inst.realized_vol_pct.toFixed(1)}</td>
+    <td class="num">${inst.bar_count ?? "—"}</td>
+    <td class="num">${inst.ticks.toLocaleString()}</td>
+    <td>${escapeHtml(inst.update_mode || "—")}</td></tr>`).join("");
+  document.getElementById("raw").innerHTML =
+    `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody>`;
+
+  if (!FULL || !FULL.correlation) return;
+  const corr = FULL.correlation;
+  const names = Object.fromEntries(FULL.instruments.map((i) => [i.key, i.name]));
+  const corrHead = `<thead><tr><th>Correlation</th>${corr.keys.map((k) => `<th>${escapeHtml(names[k])}</th>`).join("")}</tr></thead>`;
+  const corrRows = corr.keys.map((k, r) => `<tr><td><strong>${escapeHtml(names[k])}</strong></td>${
+    corr.matrix[r].map((v) => `<td class="num">${v === null ? "—" : v.toFixed(3)}</td>`).join("")}</tr>`).join("");
+  document.getElementById("corr-table").innerHTML = corrHead + `<tbody>${corrRows}</tbody>`;
+}
+
+/* --------------------------------------------------------------- wiring */
+
+function renderLive() {
+  if (!LIVE) return;
+  renderTiles(LIVE);
+  renderChecks(LIVE);
+  const worst = LIVE.instruments.some((i) => i.status === "critical") ? "critical"
+    : LIVE.instruments.some((i) => i.status === "serious") ? "serious"
+    : LIVE.instruments.some((i) => i.status === "warning") ? "warning" : "good";
+  document.getElementById("meta").textContent =
+    `${LIVE.instruments.length} instruments · up ${Math.floor(LIVE.uptime_seconds / 60)}m ` +
+    `· ${LIVE.generated_utc.replace("T", " ").replace("+00:00", "")} UTC · checks: ${worst}`;
+  if (SHOW_TABLE) renderTables();
+}
+
+function renderAll() {
+  if (!FULL) return;
+  renderIndexed();
+  renderCorrelation();
+  renderDetail();
+  if (SHOW_TABLE) renderTables();
+}
+
+function connect() {
+  const source = new EventSource("/api/stream");
+  const dot = document.getElementById("conn-dot");
+  const text = document.getElementById("conn-text");
+
+  source.addEventListener("open", () => {
+    dot.style.background = css("--good");
+    text.textContent = "streaming";
+  });
+  source.addEventListener("tick", (event) => {
+    LIVE = JSON.parse(event.data);
+    renderLive();
+  });
+  source.addEventListener("full", (event) => {
+    FULL = JSON.parse(event.data);
+    LIVE = FULL;
+    renderLive();
+    if (!HOVERING) renderAll();   // never yank a chart out from under the pointer
+  });
+  source.addEventListener("error", () => {
+    dot.style.background = css("--critical");
+    text.textContent = "reconnecting";
+  });
+}
+
+document.querySelectorAll("[data-window]").forEach((button) => {
+  button.addEventListener("click", () => {
+    selectWindow(+button.dataset.window);
+    setZoom(null);
+  });
+});
+document.querySelectorAll("[data-res]").forEach((button) => {
+  button.addEventListener("click", () => {
+    RES = button.dataset.res;
+    document.querySelectorAll("[data-res]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b === button)));
+    // 30s candles only ever hold minutes of data; pull the window in to match.
+    if (RES === "30s" && WINDOW_MIN > 30) selectWindow(15);
+    setZoom(null);
+  });
+});
+
+function selectWindow(minutes) {
+  WINDOW_MIN = minutes;
+  document.querySelectorAll("[data-window]").forEach((b) =>
+    b.setAttribute("aria-pressed", String(+b.dataset.window === minutes)));
+}
+
+document.querySelectorAll("[data-type]").forEach((button) => {
+  button.addEventListener("click", () => {
+    CHART_TYPE = button.dataset.type;
+    document.querySelectorAll("[data-type]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b === button)));
+    renderDetail();
+  });
+});
+
+document.querySelectorAll("[data-overlay]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.overlay;
+    OVERLAY[key] = !OVERLAY[key];
+    button.setAttribute("aria-pressed", String(OVERLAY[key]));
+    renderDetail();
+  });
+});
+
+document.getElementById("reset-zoom").addEventListener("click", () => setZoom(null));
+
+document.getElementById("toggle-table").addEventListener("click", (event) => {
+  SHOW_TABLE = !SHOW_TABLE;
+  event.currentTarget.setAttribute("aria-pressed", String(SHOW_TABLE));
+  document.getElementById("table-card").classList.toggle("hidden", !SHOW_TABLE);
+  if (SHOW_TABLE) renderTables();
+});
+document.getElementById("toggle-theme").addEventListener("click", () => {
+  const dark = document.documentElement.getAttribute("data-theme") === "dark"
+    || (!document.documentElement.hasAttribute("data-theme")
+        && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+  renderLive(); renderAll();
+});
+
+for (const id of ["idx-wrap", "corr-wrap", "detail-wrap"]) {
+  const node = document.getElementById(id);
+  node.addEventListener("mouseenter", () => { HOVERING = true; });
+  node.addEventListener("mouseleave", () => { HOVERING = false; });
+}
+
+let resizeTimer = null;
+addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(renderAll, 150);
+});
+
+connect();
+</script>
+</body>
+</html>
