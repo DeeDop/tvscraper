@@ -26,6 +26,7 @@
   --series-6: #008300;
   --series-7: #4a3aa7;
   --series-8: #e34948;
+  --series-9: #81623c;
   --good: #0ca30c;
   --warning: #fab219;
   --serious: #ec835a;
@@ -56,6 +57,8 @@
     --series-6: #008300;
     --series-7: #9085e9;
     --series-8: #e66767;
+  --series-9: #d3aa6f;
+    --series-9: #d3aa6f;
     --delta-up: #0ca30c;
     --delta-down: #d03b3b;
     --diverge-pos: #3987e5;
@@ -346,7 +349,7 @@ function seriesOf(inst) {
 }
 
 /** Roll 1-minute bars up into a coarser timeframe.
- *  Built here rather than opened as extra chart sessions: 8 instruments x 4
+ *  Built here rather than opened as extra chart sessions: N instruments x 4
  *  timeframes would be 32 server sessions for data exactly derivable from the
  *  1-minute stream already arriving. */
 function aggregate(bars, seconds) {
