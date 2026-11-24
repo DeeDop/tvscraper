@@ -93,6 +93,8 @@ MARKETS15: tuple[Instrument, ...] = (
     Instrument("us10y",     "TVC:US10Y",        "US 10Y Yield",      "Rates",      3),
     Instrument("us30y",     "TVC:US30Y",        "US 30Y Yield",      "Rates",      4),
     Instrument("dxy",       "TVC:DXY",          "US Dollar Index",   "FX/Index",   5),
+    Instrument("sp500",     "OANDA:SPX500USD",  "S&P 500 Cash CFD",  "Index",      6),
+    Instrument("nasdaq100", "OANDA:NAS100USD",  "Nasdaq 100 CFD",   "Index",      7),
 )
 
 WATCHLIST_NOTES = {
