@@ -122,6 +122,25 @@ The service intentionally refuses binding to public interfaces because it is
 unofficial TradingView interface; use of its market data is subject to
 TradingView and exchange data licenses.
 
+### Unified 15-minute commodity and financial market proxies
+
+For a separate KalshiBot multi-market research collector, run a broader
+endpoint while keeping the original `--watchlist gold` intact:
+
+```powershell
+.\.venv\Scripts\python.exe -m tvscraper serve --watchlist markets15
+```
+
+The same localhost JSON/SSE endpoint includes a deduplicated set of 19 keys:
+eight commodities (`gold`, `silver`, `platinum`, `palladium`,
+`copper`, `wti`, `brent`, `natgas`), six forex pairs
+(`eurusd`, `gbpusd`, `usdjpy`, `audusd`, `usdcad`, `usdmxn`),
+four Treasury yields (`us02y`, `us05y`, `us10y`, `us30y`) and
+`dxy` as a contextual USD signal. Commodity CFD prices are **not** Kalshi
+Pyth settlement prices, and all unverified symbols should be treated as
+candidates until their actual feed timestamps and update modes are checked.
+Any missing, delayed, or stale series is marked unavailable, never voted.
+
 ## Gold research: original five plus high-priority correlation candidates
 
 The `--watchlist gold` dashboard now includes the original five and **only**
