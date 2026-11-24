@@ -51,13 +51,25 @@ FUTURES: tuple[Instrument, ...] = (
     Instrument("vix",    "TVC:VIX",         "VIX",        "Vol",      8),
 )
 
+# Gold Kalshi research watchlist. These are TradingView's actual exchange-prefixed
+# identifiers (not arbitrary renamings). Some yields only print sporadically;
+# freshness must be checked from lp_time, never inferred from WebSocket activity.
+GOLD: tuple[Instrument, ...] = (
+    Instrument("dxy",    "TVC:DXY",       "Dollar Index", "FX/Index", 1),
+    Instrument("eurusd", "FX:EURUSD",     "EUR/USD",      "FX",       2),
+    Instrument("usdjpy", "FX:USDJPY",     "USD/JPY",      "FX",       3),
+    Instrument("us10y",  "TVC:US10Y",     "US 10Y Yield", "Yield",    4),
+    Instrument("gold",   "OANDA:XAUUSD",  "Gold Spot",    "Metals",   5),
+)
+
 WATCHLIST_NOTES = {
     "realtime": "spot metals and cash index - real time, no exchange delay",
     "futures": "COMEX/CME contracts - 10 min delayed without a data subscription",
+    "gold": "five TradingView symbols for short-horizon gold research; check fresh/usable flags",
 }
 
 WATCHLIST = REALTIME       # default
-WATCHLISTS = {"realtime": REALTIME, "futures": FUTURES}
+WATCHLISTS = {"realtime": REALTIME, "futures": FUTURES, "gold": GOLD}
 
 BY_SYMBOL = {i.symbol: i for i in WATCHLIST}
 BY_KEY = {i.key: i for i in WATCHLIST}
