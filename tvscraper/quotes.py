@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from . import protocol
 from .client import TradingViewClient
+from .quality import clean_book, clean_volume, finite_number, price_age_seconds, short_term_usable
 
 log = logging.getLogger(__name__)
 
@@ -49,10 +50,11 @@ class Quote:
     symbol: str
     values: dict[str, Any] = field(default_factory=dict)
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_price_received_at: datetime | None = None
 
     @property
     def last(self) -> float | None:
-        return self.values.get("lp")
+        return finite_number(self.values.get("lp"))
 
     @property
     def change(self) -> float | None:
@@ -64,15 +66,15 @@ class Quote:
 
     @property
     def volume(self) -> float | None:
-        return self.values.get("volume")
+        return clean_volume(self.symbol, self.values.get("volume"))
 
     @property
     def bid(self) -> float | None:
-        return self.values.get("bid")
+        return clean_book(self.symbol, self.values.get("bid"), self.values.get("ask"))[0]
 
     @property
     def ask(self) -> float | None:
-        return self.values.get("ask")
+        return clean_book(self.symbol, self.values.get("bid"), self.values.get("ask"))[1]
 
     @property
     def is_delayed(self) -> bool:
@@ -80,18 +82,26 @@ class Quote:
 
     @property
     def exchange_time(self) -> datetime | None:
-        ts = self.values.get("lp_time")
-        if ts is None:
+        ts = finite_number(self.values.get("lp_time"))
+        if ts is None or ts <= 0:
             return None
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
+        try:
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
 
     def as_row(self) -> dict[str, Any]:
         """Flat dict suitable for CSV/JSONL sinks."""
         exch_time = self.exchange_time
+        last_received = self.last_price_received_at
+        age = price_age_seconds(self.values.get("lp_time"))
         return {
             "symbol": self.symbol,
             "received_utc": self.updated_at.isoformat(timespec="milliseconds"),
             "exchange_utc": exch_time.isoformat() if exch_time else "",
+            "last_price_received_utc": last_received.isoformat(timespec="milliseconds") if last_received else "",
+            "price_age_s": round(age, 2) if age is not None else None,
+            "usable_short_term": short_term_usable(self.symbol, self.values),
             "last": self.last,
             "change": self.change,
             "change_pct": self.change_pct,
@@ -141,7 +151,9 @@ class QuoteStream:
     # -- session ---------------------------------------------------------
 
     def _setup(self) -> None:
-        """(Re)create the quote session. Runs on every connect."""
+        """(Re)create the quote session. Drop merged state from old connections."""
+        with self._lock:
+            self._snapshots.clear()
         self._session = protocol.session_id("qs")
         self.client.send("quote_create_session", [self._session])
         self.client.send("quote_set_fields", [self._session, *self.fields])
@@ -183,11 +195,17 @@ class QuoteStream:
 
         with self._lock:
             quote = self._snapshots.setdefault(symbol, Quote(symbol=symbol))
+            price_update = (
+                ("lp" in update and update["lp"] != quote.values.get("lp"))
+                or ("lp_time" in update and update["lp_time"] != quote.values.get("lp_time"))
+            )
             quote.values.update(update)
             quote.updated_at = datetime.now(timezone.utc)
-            if self._gate_on_last and "lp" not in quote.values:
+            if price_update and finite_number(quote.values.get("lp")) is not None:
+                quote.last_price_received_at = quote.updated_at
+            if self._gate_on_last and finite_number(quote.values.get("lp")) is None:
                 return
-            snapshot = Quote(symbol, dict(quote.values), quote.updated_at)
+            snapshot = Quote(symbol, dict(quote.values), quote.updated_at, quote.last_price_received_at)
 
         if self.on_update is not None:
             self.on_update(snapshot)
@@ -204,8 +222,8 @@ class QuoteStream:
     def snapshot(self, symbol: str) -> Quote | None:
         with self._lock:
             quote = self._snapshots.get(symbol)
-            return Quote(quote.symbol, dict(quote.values), quote.updated_at) if quote else None
+            return Quote(quote.symbol, dict(quote.values), quote.updated_at, quote.last_price_received_at) if quote else None
 
     def snapshots(self) -> dict[str, Quote]:
         with self._lock:
-            return {s: Quote(q.symbol, dict(q.values), q.updated_at) for s, q in self._snapshots.items()}
+            return {s: Quote(q.symbol, dict(q.values), q.updated_at, q.last_price_received_at) for s, q in self._snapshots.items()}
