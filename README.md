@@ -53,62 +53,73 @@ python -m tvscraper bars NASDAQ:AAPL --resolution 5 --closed-only --csv data/aap
 
 Stop with `Ctrl+C`, or pass `--duration 60` to run for a fixed number of seconds.
 
-## Gold research: five free TradingView symbols
+## Gold research: original five plus high-priority correlation candidates
 
-These are TradingView's **full exchange-prefixed identifiers**, verified against
-their public symbol pages; do not replace them with bare names. This watchlist
-is available in your fork:
+The `--watchlist gold` dashboard now includes the original five and **only**
+the four additional tickers marked High or Very high in the proposed research
+shortlist. The labels are *research hypotheses*, **not** verified predictive
+correlations for 15-minute Kalshi markets.
 
-| Input | TradingView subscription | Important limitation |
-|---|---|---|
-| US Dollar Index | `TVC:DXY` | Synthetic index: no executable bid/ask or exchange-traded volume |
-| EUR/USD | `FX:EURUSD` | Forex quote, not central exchange trade volume |
-| USD/JPY | `FX:USDJPY` | Forex quote, not central exchange trade volume |
-| US 10-year yield | `TVC:US10Y` | Yield may update infrequently, especially out of session |
-| Gold spot | `OANDA:XAUUSD` | Spot/CFD proxy; NOT COMEX GC or Kalshi settlement gold |
+| Input | TradingView subscription | Why included | Limitation |
+|---|---|---|---|
+| Gold spot | `OANDA:XAUUSD` | Reference gold return series | Spot/CFD proxy, not Kalshi settlement or COMEX |
+| US Dollar Index | `TVC:DXY` | Often inverse macro relationship | Index; no executable book/volume |
+| EUR/USD | `FX:EURUSD` | USD-related confirmation | No centrally reported spot-FX volume |
+| USD/JPY | `FX:USDJPY` | USD and risk regime | Relationship varies by regime |
+| US 10-year yield | `TVC:US10Y` | Rates confirmation | May be stale outside active hours |
+| **Silver spot (very high)** | **`OANDA:XAGUSD`** | Closely related precious metal | Correlation is not a lead signal |
+| **AUD/USD (high)** | **`FX:AUDUSD`** | Commodity currency / USD channel | USD exposure overlaps with EURUSD |
+| **US 2-year yield (high)** | **`TVC:US02Y`** | Short-rate expectations | May be stale; nominal is not real yield |
+| **US 5-year yield (high)** | **`TVC:US05Y`** | Medium-rate expectations | May be stale; overlaps with other yields |
 
-One-line terminal test:
+The 2Y/5Y ticker names are candidate TradingView identifiers, **not yet live
+verified with the anonymous feed**. The same applies to their short-term update
+cadences. If the server rejects a symbol, `symbol_error` is logged; if a quote
+is old, `usable_short_term=False`. That ticker should have **no live voting
+weight** until its feed quality and predictive value are established.
 
-```bash
-python -m tvscraper quotes TVC:DXY FX:EURUSD FX:USDJPY TVC:US10Y OANDA:XAUUSD
-```
-
-Or open the dedicated five-input graphical dashboard:
+From the project root, run the dashboard (live prices, freshness checks,
+1-minute bars and historical return-correlation matrix):
 
 ```bash
 python -m tvscraper dashboard --watchlist gold
 ```
 
-For your bot, record raw prices **with their original exchange timestamps**:
+Or inspect live updates in the terminal:
 
 ```bash
-python -m tvscraper quotes TVC:DXY FX:EURUSD FX:USDJPY TVC:US10Y OANDA:XAUUSD --plain --csv gold_market_ticks.csv
+python -m tvscraper quotes TVC:DXY FX:EURUSD FX:USDJPY TVC:US10Y OANDA:XAUUSD OANDA:XAGUSD FX:AUDUSD TVC:US02Y TVC:US05Y
 ```
 
-CSV output now includes `price_age_s` (age of the underlying printed
-price, not the latest received WebSocket message), `last_price_received_utc`,
-and `usable_short_term` (conservative 30-second cutoff; rejects delayed and
-untimestamped quotes). The terminal table displays price age and eligibility. A false flag means **do not use that instrument as a live
-short-term trading vote**, not that the symbol is wrong. An index can have a
-valid last price while its volume, bid and ask are correctly reported as blank.
-For both `TVC:DXY` and `TVC:US10Y`, synthetic volume is not exported and
-non-executable index bid/ask is hidden.
+To collect timestamped quotes for later analysis:
 
-The dashboard's Freshness check now uses `lp_time` (underlying last-price
-timestamp) and the 30-second locally aggregated candles use *only* fresh
-exchange-timestamped price updates. This prevents stale yield values from
-masquerading as a new tick. The `update_mode` field should also be inspected:
-an active WebSocket does **not** prove live exchange data.
+```bash
+python -m tvscraper quotes TVC:DXY FX:EURUSD FX:USDJPY TVC:US10Y OANDA:XAUUSD OANDA:XAGUSD FX:AUDUSD TVC:US02Y TVC:US05Y --plain --csv gold_market_ticks.csv
+```
 
-Run the offline regression tests after updates:
+CSV output includes `price_age_s` (age of underlying printed price, not the
+latest WS message), `last_price_received_utc` and `usable_short_term`.
+The terminal table displays price age and eligibility. A false flag means **do
+not use that instrument as a live short-term trading vote**, not that the
+symbol is necessarily wrong. `TVC:` index/yield feeds do not supply valid
+exchange-traded volume or executable bid/ask: those are exported as blank.
+
+The dashboard's Freshness check uses `lp_time` and the locally aggregated
+30-second candles use only fresh exchange-timestamped prints. An active socket
+does **not** prove current market prices. The correlation matrix is based on
+aligned 1-minute *returns*, not price levels. It describes historical
+co-movement, **not** predictive lead/lag or demonstrated Kalshi edge. Avoid
+assigning signal weights without forward validation.
+
+Run the offline regression tests:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
 This is an unofficial research feed, not an official TradingView API.
-TradingView and market-data licensing terms apply, and no specific ticker's
-anonymous live availability is guaranteed.
+TradingView and market-data licensing terms apply, and anonymous live
+availability is not guaranteed.
 
 ## Dashboard
 
