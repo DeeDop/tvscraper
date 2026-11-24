@@ -55,9 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
     dash.add_argument("--host", default="127.0.0.1")
     dash.add_argument("--port", type=int, default=8787)
     dash.add_argument(
-        "--watchlist", choices=["realtime", "futures", "gold"], default="realtime",
+        "--watchlist", choices=["realtime", "futures", "gold", "markets15"], default="realtime",
         help="realtime: spot metals + cash index (default); "
-             "futures: delayed COMEX/CME; gold: five original inputs plus silver, AUDUSD, 2Y/5Y",
+             "futures: delayed COMEX/CME; gold: high-priority gold research; markets15: full commodity + FX + yields",
     )
     dash.add_argument("--resolution", default="1", help=f"bar size; one of: {', '.join(sorted(VALID_RESOLUTIONS))}")
     dash.add_argument("--history", type=int, default=360, help="bars of history to load on connect")
@@ -67,8 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1", help="loopback only (default: 127.0.0.1)")
     serve.add_argument("--port", type=int, default=8788, help="HTTP API port (default: 8788)")
     serve.add_argument(
-        "--watchlist", choices=["gold", "realtime", "futures"], default="gold",
-        help="gold (default): original five plus only high-priority correlation candidates",
+        "--watchlist", choices=["gold", "realtime", "futures", "markets15"], default="gold",
+        help="gold (default): high-priority gold factors; markets15: all commodity/FX/yield proxies",
     )
     return parser
 
