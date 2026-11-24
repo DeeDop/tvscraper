@@ -1,10 +1,10 @@
 """The tracked instrument set.
 
-``slot`` is the categorical palette slot (1-8) each instrument owns. Colour
+``slot`` is the categorical palette slot (1-9) each instrument owns. Colour
 follows the entity, so a slot is fixed here and never reassigned by rank or by
 what happens to be visible - filtering the dashboard must not repaint the rest.
 
-Two watchlists ship. The default is real time for anonymous users; the futures
+Three watchlists ship. The default is real time for anonymous users; the futures
 contracts are the same exposures but carry a 10-minute exchange delay unless the
 account is entitled to CME/COMEX data. See ``WATCHLIST_NOTES`` below.
 """
@@ -20,7 +20,7 @@ class Instrument:
     symbol: str       # TradingView EXCHANGE:TICKER
     name: str         # display name
     group: str        # for grouping in the UI
-    slot: int         # categorical colour slot, 1-8
+    slot: int         # categorical colour slot, 1-9
 
 
 # Real-time under the anonymous token: OANDA's spot metals and cash index quote
@@ -55,17 +55,24 @@ FUTURES: tuple[Instrument, ...] = (
 # identifiers (not arbitrary renamings). Some yields only print sporadically;
 # freshness must be checked from lp_time, never inferred from WebSocket activity.
 GOLD: tuple[Instrument, ...] = (
+    # Existing five symbols.
     Instrument("dxy",    "TVC:DXY",       "Dollar Index", "FX/Index", 1),
     Instrument("eurusd", "FX:EURUSD",     "EUR/USD",      "FX",       2),
     Instrument("usdjpy", "FX:USDJPY",     "USD/JPY",      "FX",       3),
     Instrument("us10y",  "TVC:US10Y",     "US 10Y Yield", "Yield",    4),
     Instrument("gold",   "OANDA:XAUUSD",  "Gold Spot",    "Metals",   5),
+    # Only the proposed high / very-high relevance candidates; no medium/low.
+    # "High" is a research priority, NOT a measured 15-minute predictive edge.
+    Instrument("silver", "OANDA:XAGUSD",  "Silver Spot",  "Metals",   6),
+    Instrument("audusd", "FX:AUDUSD",     "AUD/USD",      "FX",       7),
+    Instrument("us02y",  "TVC:US02Y",     "US 2Y Yield",  "Yield",    8),
+    Instrument("us05y",  "TVC:US05Y",     "US 5Y Yield",  "Yield",    9),
 )
 
 WATCHLIST_NOTES = {
     "realtime": "spot metals and cash index - real time, no exchange delay",
     "futures": "COMEX/CME contracts - 10 min delayed without a data subscription",
-    "gold": "five TradingView symbols for short-horizon gold research; check fresh/usable flags",
+    "gold": "gold plus the high-priority silver, AUDUSD and 2Y/5Y yield candidates; check price age and usable flags",
 }
 
 WATCHLIST = REALTIME       # default
