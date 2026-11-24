@@ -82,7 +82,7 @@ class QuoteQualityTests(unittest.TestCase):
         self.assertGreater(record["price_age_seconds"], 400)
         freshness = next(c for c in record["checks"] if c["id"] == "fresh")
         self.assertEqual(freshness["status"], "serious")
-        self.assertEqual(record["micro_bars"] if "micro_bars" in record else [], [])
+        self.assertEqual(state.snapshot(with_series=True)["instruments"][0]["micro_bars"], [])
 
 
 if __name__ == "__main__":
