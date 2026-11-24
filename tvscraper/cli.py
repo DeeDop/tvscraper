@@ -57,11 +57,19 @@ def build_parser() -> argparse.ArgumentParser:
     dash.add_argument(
         "--watchlist", choices=["realtime", "futures", "gold"], default="realtime",
         help="realtime: spot metals + cash index (default); "
-             "futures: delayed COMEX/CME; gold: DXY, EURUSD, USDJPY, US10Y, spot gold",
+             "futures: delayed COMEX/CME; gold: five original inputs plus silver, AUDUSD, 2Y/5Y",
     )
     dash.add_argument("--resolution", default="1", help=f"bar size; one of: {', '.join(sorted(VALID_RESOLUTIONS))}")
     dash.add_argument("--history", type=int, default=360, help="bars of history to load on connect")
     dash.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+
+    serve = sub.add_parser("serve", help="headless read-only JSON/SSE endpoint for another program")
+    serve.add_argument("--host", default="127.0.0.1", help="loopback only (default: 127.0.0.1)")
+    serve.add_argument("--port", type=int, default=8788, help="HTTP API port (default: 8788)")
+    serve.add_argument(
+        "--watchlist", choices=["gold", "realtime", "futures"], default="gold",
+        help="gold (default): original five plus only high-priority correlation candidates",
+    )
     return parser
 
 
@@ -83,6 +91,19 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
         stream=sys.stderr,
     )
+
+    if args.command == "serve":
+        from .api import run_api
+        from .instruments import WATCHLISTS
+
+        run_api(
+            host=args.host,
+            port=args.port,
+            instruments=WATCHLISTS[args.watchlist],
+            name=args.watchlist,
+            token=args.token,
+        )
+        return 0
 
     if args.command == "dashboard":
         from .dashboard import run_dashboard
