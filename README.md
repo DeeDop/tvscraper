@@ -122,26 +122,33 @@ The service intentionally refuses binding to public interfaces because it is
 unofficial TradingView interface; use of its market data is subject to
 TradingView and exchange data licenses.
 
-### Unified 15-minute commodity and financial market proxies
+### Focused 15-minute Gold + USD currency price library
 
-For a separate KalshiBot multi-market research collector, run a broader
-endpoint while keeping the original `--watchlist gold` intact:
+This headless endpoint supports **one Kalshi commodity target (GOLD) and six
+USD currency targets**. High-priority gold context is retained for research,
+but is *not* treated as another Kalshi betting target.
 
 ```powershell
 .\.venv\Scripts\python.exe -m tvscraper serve --watchlist markets15
 ```
 
-The localhost JSON/SSE endpoint contains **20 price inputs**: eight
-commodities (`gold`, `silver`, `platinum`, `palladium`,
-`copper`, `wti`, `brent`, `natgas`), six forex pairs
-(`eurusd`, `gbpusd`, `usdjpy`, `audusd`, `usdcad`, `usdmxn`),
-four Treasury yields (`us02y`, `us05y`, `us10y`, `us30y`),
-`sp500` and a contextual USD index `dxy`. Of these, 19 are mapped to
-Kalshi 15-minute Commodities/Financials series in the KalshiBot collector;
-DXY is contextual only. Commodity CFD prices are **not** Kalshi
-Pyth settlement prices, and all unverified symbols should be treated as
-candidates until their actual feed timestamps and update modes are checked.
-Any missing, delayed, or stale series is marked unavailable, never voted.
+The 12 unique quote keys are:
+
+| Type | Keys |
+|---|---|
+| Bet targets | `gold`, `eurusd`, `gbpusd`, `usdjpy`, `audusd`, `usdcad`, `usdmxn` |
+| Gold context only | `silver`, `dxy`, `us02y`, `us05y`, `us10y` |
+
+The `gold` preset remains separate with its nine high-priority Gold research
+inputs. The `markets15` preset is a 12-symbol superset of those nine, adding
+the other three currencies only. Commodities such as oil/platinum and unrelated
+market targets are **not subscribed**. The independent BTC/crypto project is
+unchanged.
+
+Verify `/api/quotes` timestamps and `usable_short_term` before using any
+symbol. In particular, Treasury quotes can be stale out of hours. These are
+spot, CFD or reference-market proxies; **none replaces Kalshi's exact contract
+settlement price**. The feed itself has no trading functionality.
 
 ## Gold research: original five plus high-priority correlation candidates
 
