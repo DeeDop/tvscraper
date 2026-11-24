@@ -100,8 +100,13 @@ class MarketState:
             price_wall = quote.last_price_received_at.timestamp() if quote.last_price_received_at else None
             if price_wall is not None and price_wall != state.last_price_wall:
                 state.last_price_wall = price_wall
-                if quote.last is not None:
-                    self._fold_micro(state, quote.last, quote.volume, now)
+                # Only build 30s "live" candles from fresh, timestamped prints.
+                # Bucket on exchange time, not receipt time, to avoid moving
+                # lagged ticks into the wrong half-minute.
+                if quote.last is not None and short_term_usable(quote.symbol, quote.values, now):
+                    exchange_epoch = finite_number(quote.values.get("lp_time"))
+                    if exchange_epoch is not None:
+                        self._fold_micro(state, quote.last, quote.volume, exchange_epoch)
 
     def _fold_micro(self, state: InstrumentState, price: float, volume: Any, now: float) -> None:
         """Fold one tick into its 30-second bucket.
