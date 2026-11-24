@@ -95,6 +95,8 @@ class TableSink(Sink):
         ("ask", 14, ">"),
         ("volume", 16, ">"),
         ("exchange_utc", 14, ">"),
+        ("price_age_s", 11, ">"),
+        ("usable_short_term", 8, ">"),
     ]
 
     def __init__(self) -> None:
