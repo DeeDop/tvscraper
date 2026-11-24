@@ -23,13 +23,14 @@ from typing import Any
 from .bars import Bar
 from .instruments import WATCHLIST, Instrument
 from .quotes import Quote
+from .quality import clean_book, clean_volume, finite_number, price_age_seconds, short_term_usable
 
 # Check severities, mapped to the status palette in the UI. Every check ships an
 # icon and a label as well, so status is never carried by colour alone.
 GOOD, WARN, SERIOUS, CRITICAL, UNKNOWN = "good", "warning", "serious", "critical", "unknown"
 
-STALE_GOOD_S = 60.0
-STALE_WARN_S = 300.0
+STALE_GOOD_S = 30.0  # for minute-scale modeling, not general daily investing
+STALE_WARN_S = 120.0
 CROSS_GOOD_BPS = 10.0      # quote vs bar close agreement, basis points
 CROSS_WARN_BPS = 50.0
 MIN_CORR_POINTS = 30       # below this, correlation is noise; report it as such
@@ -62,6 +63,7 @@ class InstrumentState:
     ticks: int = 0
     bar_updates: int = 0
     last_tick_wall: float | None = None
+    last_price_wall: float | None = None  # changed print, not any quote-field message
     last_volume: float | None = None
     first_seen: float = field(default_factory=time.time)
 
@@ -95,9 +97,11 @@ class MarketState:
             state.ticks += 1
             now = time.time()
             state.last_tick_wall = now
-            last = quote.values.get("lp")
-            if isinstance(last, (int, float)):
-                self._fold_micro(state, float(last), quote.values.get("volume"), now)
+            price_wall = quote.last_price_received_at.timestamp() if quote.last_price_received_at else None
+            if price_wall is not None and price_wall != state.last_price_wall:
+                state.last_price_wall = price_wall
+                if quote.last is not None:
+                    self._fold_micro(state, quote.last, quote.volume, now)
 
     def _fold_micro(self, state: InstrumentState, price: float, volume: Any, now: float) -> None:
         """Fold one tick into its 30-second bucket.
@@ -107,7 +111,7 @@ class MarketState:
         and the baseline is simply re-anchored.
         """
         delta = 0.0
-        if isinstance(volume, (int, float)):
+        if isinstance(volume, (int, float)) and math.isfinite(volume):
             if state.last_volume is not None and volume >= state.last_volume:
                 delta = float(volume) - state.last_volume
             state.last_volume = float(volume)
@@ -186,7 +190,9 @@ class MarketState:
     ) -> dict[str, Any]:
         inst = state.instrument
         quote = state.quote
-        last = quote.get("lp")
+        last = finite_number(quote.get("lp"))
+        bid, ask = clean_book(inst.symbol, quote.get("bid"), quote.get("ask"))
+        age = price_age_seconds(quote.get("lp_time"), now)
         decimals = _decimals(quote.get("pricescale"), last)
 
         checks = self._checks(state, series, now)
@@ -204,19 +210,22 @@ class MarketState:
             "last": last,
             "change": quote.get("ch"),
             "change_pct": quote.get("chp"),
-            "bid": quote.get("bid") or None,
-            "ask": quote.get("ask") or None,
+            "bid": bid,
+            "ask": ask,
             "open": quote.get("open_price"),
             "high": quote.get("high_price"),
             "low": quote.get("low_price"),
             "prev_close": quote.get("prev_close_price"),
-            "volume": quote.get("volume"),
+            "volume": clean_volume(inst.symbol, quote.get("volume")),
             "update_mode": quote.get("update_mode"),
             "delay_seconds": _delay_seconds(quote.get("update_mode")),
             "exchange_time": quote.get("lp_time"),
+            "price_age_seconds": round(age, 1) if age is not None else None,
+            "usable_short_term": short_term_usable(inst.symbol, quote, now),
             "ticks": state.ticks,
             "bar_updates": state.bar_updates,
             "age_seconds": round(now - state.last_tick_wall, 1) if state.last_tick_wall else None,
+            "price_update_age_seconds": round(now - state.last_price_wall, 1) if state.last_price_wall else None,
             "range_position": _range_position(last, quote.get("low_price"), quote.get("high_price")),
             "realized_vol_pct": _realized_vol([b.close for _, b in series], self.resolution_seconds),
             "bar_count": len(series),
@@ -263,19 +272,21 @@ class MarketState:
         else:
             checks.append(Check("feed", "Feed", WARN, str(mode or "unknown mode")))
 
-        # 2. Are updates still arriving? A quiet feed is normal outside session
-        #    hours, so this degrades rather than screaming.
-        age = (now - state.last_tick_wall) if state.last_tick_wall else None
+        # 2. Age the underlying last price. A field-only WS message must not
+        #    make an old print appear fresh, even when the socket is active.
+        age = price_age_seconds(quote.get("lp_time"), now)
+        msg_age = (now - state.last_tick_wall) if state.last_tick_wall else None
+        suffix = f"; message {msg_age:.0f}s ago" if msg_age is not None else ""
         if age is None:
-            checks.append(Check("fresh", "Freshness", UNKNOWN, "awaiting first tick"))
+            checks.append(Check("fresh", "Freshness", UNKNOWN, "missing exchange price timestamp" + suffix))
+        elif age < -5:
+            checks.append(Check("fresh", "Freshness", SERIOUS, f"price timestamp {abs(age):.0f}s in future (clock mismatch)"))
         elif age <= STALE_GOOD_S:
-            checks.append(Check("fresh", "Freshness", GOOD, f"tick {age:.0f}s ago"))
+            checks.append(Check("fresh", "Freshness", GOOD, f"last price {max(age, 0):.0f}s old" + suffix))
         elif age <= STALE_WARN_S:
-            checks.append(Check("fresh", "Freshness", WARN, f"quiet for {age:.0f}s"))
+            checks.append(Check("fresh", "Freshness", WARN, f"last price {age:.0f}s old" + suffix))
         else:
-            checks.append(
-                Check("fresh", "Freshness", SERIOUS, f"no tick for {age / 60:.0f} min - market likely closed")
-            )
+            checks.append(Check("fresh", "Freshness", SERIOUS, f"last price {age / 60:.1f} min old" + suffix))
 
         # 3. The independent-path check: quote session vs chart session.
         forming = series[-1][1] if series else None
@@ -301,9 +312,11 @@ class MarketState:
             checks.append(Check("range", "Range sanity", CRITICAL, f"{last:g} outside {low:g}-{high:g}"))
 
         # 5. A crossed book means the decode is wrong (or the fields are stale).
-        bid, ask = quote.get("bid"), quote.get("ask")
-        if not bid or not ask:
-            checks.append(Check("spread", "Spread", UNKNOWN, "no book quoted"))
+        bid, ask = finite_number(quote.get("bid")), finite_number(quote.get("ask"))
+        if state.instrument.symbol.startswith("TVC:"):
+            checks.append(Check("spread", "Spread", UNKNOWN, "synthetic index/yield; no executable book"))
+        elif bid is None or ask is None or bid <= 0 or ask <= 0:
+            checks.append(Check("spread", "Spread", UNKNOWN, "no valid book quoted"))
         elif bid <= ask:
             checks.append(Check("spread", "Spread", GOOD, f"{(ask - bid) / ask * 10_000:.1f} bps"))
         else:
@@ -367,6 +380,7 @@ def _copy_state(state: InstrumentState) -> InstrumentState:
         ticks=state.ticks,
         bar_updates=state.bar_updates,
         last_tick_wall=state.last_tick_wall,
+        last_price_wall=state.last_price_wall,
         last_volume=state.last_volume,
         first_seen=state.first_seen,
     )
