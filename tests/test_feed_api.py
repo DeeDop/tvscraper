@@ -16,7 +16,7 @@ from urllib.request import urlopen
 from tvscraper.api import FeedHandler
 from tvscraper.cli import build_parser
 from tvscraper.feed import MarketDataFeed
-from tvscraper.instruments import GOLD, WATCHLISTS
+from tvscraper.instruments import GOLD, MARKETS15, WATCHLISTS
 
 
 class GoldFeedTests(unittest.TestCase):
@@ -41,6 +41,17 @@ class GoldFeedTests(unittest.TestCase):
         })
         self.assertIs(WATCHLISTS["gold"], GOLD)
         self.assertEqual({i.slot for i in GOLD}, set(range(1, 10)))
+
+    def test_curated_markets15_has_seven_targets_and_five_context_quotes(self):
+        expected = {
+            "gold", "eurusd", "gbpusd", "usdjpy", "audusd", "usdcad", "usdmxn",
+            "silver", "dxy", "us02y", "us05y", "us10y",
+        }
+        self.assertEqual({i.key for i in MARKETS15}, expected)
+        self.assertEqual(len(MARKETS15), 12)
+        self.assertIs(WATCHLISTS["markets15"], MARKETS15)
+        self.assertFalse({"platinum", "palladium", "wti", "brent",
+                          "natgas", "us30y", "sp500"} & expected)
 
     def test_missing_data_has_explicit_status(self):
         payload = self.feed.snapshot()
