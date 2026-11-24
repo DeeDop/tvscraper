@@ -17,6 +17,7 @@ from .sinks import CsvSink, FanoutSink, JsonlSink, LineSink, Sink, TableSink
 QUOTE_COLUMNS = [
     "symbol", "received_utc", "exchange_utc", "last", "change", "change_pct",
     "volume", "bid", "ask", "open", "high", "low", "prev_close", "update_mode",
+    "last_price_received_utc", "price_age_s", "usable_short_term",
 ]
 BAR_COLUMNS = ["symbol", "resolution", "time_utc", "open", "high", "low", "close", "volume", "closed"]
 
@@ -54,9 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
     dash.add_argument("--host", default="127.0.0.1")
     dash.add_argument("--port", type=int, default=8787)
     dash.add_argument(
-        "--watchlist", choices=["realtime", "futures"], default="realtime",
-        help="realtime: spot metals + cash index, no delay (default). "
-             "futures: COMEX/CME contracts, 10 min delayed without a subscription",
+        "--watchlist", choices=["realtime", "futures", "gold"], default="realtime",
+        help="realtime: spot metals + cash index (default); "
+             "futures: delayed COMEX/CME; gold: DXY, EURUSD, USDJPY, US10Y, spot gold",
     )
     dash.add_argument("--resolution", default="1", help=f"bar size; one of: {', '.join(sorted(VALID_RESOLUTIONS))}")
     dash.add_argument("--history", type=int, default=360, help="bars of history to load on connect")
