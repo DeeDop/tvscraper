@@ -53,6 +53,75 @@ python -m tvscraper bars NASDAQ:AAPL --resolution 5 --closed-only --csv data/aap
 
 Stop with `Ctrl+C`, or pass `--duration 60` to run for a fixed number of seconds.
 
+## Headless endpoint and Python library for a separate Gold bot
+
+**This repository supplies market data; the separate Gold bot owns its
+strategies, correlation measurements, probabilities, and any trading logic.**
+The headless service does **not** open the dashboard, place orders, or require
+an API account. It uses one anonymous TradingView WebSocket quote session.
+
+After installing the project, run this in the tvscraper directory:
+
+```powershell
+.\.venv\Scripts\python.exe -m tvscraper serve --watchlist gold
+```
+
+By default the API listens **only on this computer** at
+`127.0.0.1:8788` and exposes:
+
+| Read-only endpoint | Purpose |
+|---|---|
+| `GET http://127.0.0.1:8788/api/quotes` | Latest validated JSON for all nine high-priority gold-research inputs |
+| `GET http://127.0.0.1:8788/api/stream` | Server-Sent Events (`quotes`), pushed on updates, throttled to 4 messages/second |
+| `GET http://127.0.0.1:8788/api/health` | Connection status and count of currently usable inputs |
+
+Example bot-side consumer (standard library):
+
+```python
+import json
+from urllib.request import urlopen
+
+with urlopen("http://127.0.0.1:8788/api/quotes", timeout=2) as response:
+    feed = json.load(response)
+
+gold = feed["quotes"]["gold"]
+if feed["connected"] and gold["usable_short_term"]:
+    print(gold["last"], gold["exchange_utc"], gold["price_age_s"])
+```
+
+Each instrument is present even if it has no quote. The record includes
+`symbol`, `last`, `exchange_utc`, `received_utc`, `price_age_s`,
+`update_mode`, `status` and `usable_short_term`. **The receiving bot must
+reject missing, stale, delayed, invalid, and disconnected records** rather than
+treating them as neutral votes. A live connection alone is not enough.
+`OANDA:XAUUSD` is a gold spot proxy, not Kalshi's settlement price.
+
+The same feed can be used **directly as a Python library** without HTTP:
+
+```python
+from tvscraper import MarketDataFeed, GOLD
+
+feed = MarketDataFeed(GOLD)
+feed.start()
+try:
+    if not feed.wait_connected(20):
+        raise RuntimeError("TradingView unavailable")
+    result = feed.snapshot()
+    print(result["quotes"]["silver"])
+finally:
+    feed.stop()
+```
+
+For the lowest integration latency, supply an `on_quote` callback to
+`MarketDataFeed(GOLD, on_quote=...)`; it receives updates on the WebSocket
+thread. Use the original exchange timestamp to distinguish a new print from
+a quote-field update.
+
+The service intentionally refuses binding to public interfaces because it is
+**unauthenticated**. Avoid exposing it through a tunnel. The feed is an
+unofficial TradingView interface; use of its market data is subject to
+TradingView and exchange data licenses.
+
 ## Gold research: original five plus high-priority correlation candidates
 
 The `--watchlist gold` dashboard now includes the original five and **only**
