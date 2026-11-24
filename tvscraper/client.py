@@ -89,6 +89,11 @@ class TradingViewClient:
     def wait_connected(self, timeout: float = 15.0) -> bool:
         return self._connected.wait(timeout)
 
+    @property
+    def connected(self) -> bool:
+        """Whether the socket has an established, active session."""
+        return self._connected.is_set()
+
     def send(self, func: str, params: list[Any]) -> None:
         self._send_raw(protocol.message(func, params))
 
