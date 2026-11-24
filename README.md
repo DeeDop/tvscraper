@@ -16,7 +16,7 @@ standard library for everything else.
 ## Install
 
 ```bash
-git clone https://github.com/Tekyyy/tvscraper.git
+git clone https://github.com/Drew4311/tvscraper.git
 cd tvscraper
 pip install -r requirements.txt
 ```
@@ -52,6 +52,63 @@ python -m tvscraper bars NASDAQ:AAPL --resolution 5 --closed-only --csv data/aap
 ```
 
 Stop with `Ctrl+C`, or pass `--duration 60` to run for a fixed number of seconds.
+
+## Gold research: five free TradingView symbols
+
+These are TradingView's **full exchange-prefixed identifiers**, verified against
+their public symbol pages; do not replace them with bare names. This watchlist
+is available in your fork:
+
+| Input | TradingView subscription | Important limitation |
+|---|---|---|
+| US Dollar Index | `TVC:DXY` | Synthetic index: no executable bid/ask or exchange-traded volume |
+| EUR/USD | `FX:EURUSD` | Forex quote, not central exchange trade volume |
+| USD/JPY | `FX:USDJPY` | Forex quote, not central exchange trade volume |
+| US 10-year yield | `TVC:US10Y` | Yield may update infrequently, especially out of session |
+| Gold spot | `OANDA:XAUUSD` | Spot/CFD proxy; NOT COMEX GC or Kalshi settlement gold |
+
+One-line terminal test:
+
+```bash
+python -m tvscraper quotes TVC:DXY FX:EURUSD FX:USDJPY TVC:US10Y OANDA:XAUUSD
+```
+
+Or open the dedicated five-input graphical dashboard:
+
+```bash
+python -m tvscraper dashboard --watchlist gold
+```
+
+For your bot, record raw prices **with their original exchange timestamps**:
+
+```bash
+python -m tvscraper quotes TVC:DXY FX:EURUSD FX:USDJPY TVC:US10Y OANDA:XAUUSD --plain --csv gold_market_ticks.csv
+```
+
+CSV and table output now have `price_age_s` (age of the underlying printed
+price, not the latest received WebSocket message), `last_price_received_utc`
+and `usable_short_term` (conservative 30-second cutoff; rejects delayed and
+untimestamped quotes). A false flag means **do not use that instrument as a live
+short-term trading vote**, not that the symbol is wrong. An index can have a
+valid last price while its volume, bid and ask are correctly reported as blank.
+For both `TVC:DXY` and `TVC:US10Y`, synthetic volume is not exported and
+non-executable index bid/ask is hidden.
+
+The dashboard's Freshness check now uses `lp_time` (underlying last-price
+timestamp) and the 30-second locally aggregated candles use *only* fresh
+exchange-timestamped price updates. This prevents stale yield values from
+masquerading as a new tick. The `update_mode` field should also be inspected:
+an active WebSocket does **not** prove live exchange data.
+
+Run the offline regression tests after updates:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+This is an unofficial research feed, not an official TradingView API.
+TradingView and market-data licensing terms apply, and no specific ticker's
+anonymous live availability is guaranteed.
 
 ## Dashboard
 
