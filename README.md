@@ -85,10 +85,10 @@ For your bot, record raw prices **with their original exchange timestamps**:
 python -m tvscraper quotes TVC:DXY FX:EURUSD FX:USDJPY TVC:US10Y OANDA:XAUUSD --plain --csv gold_market_ticks.csv
 ```
 
-CSV and table output now have `price_age_s` (age of the underlying printed
-price, not the latest received WebSocket message), `last_price_received_utc`
+CSV output now includes `price_age_s` (age of the underlying printed
+price, not the latest received WebSocket message), `last_price_received_utc`,
 and `usable_short_term` (conservative 30-second cutoff; rejects delayed and
-untimestamped quotes). A false flag means **do not use that instrument as a live
+untimestamped quotes). The terminal table displays price age and eligibility. A false flag means **do not use that instrument as a live
 short-term trading vote**, not that the symbol is wrong. An index can have a
 valid last price while its volume, bid and ask are correctly reported as blank.
 For both `TVC:DXY` and `TVC:US10Y`, synthetic volume is not exported and
