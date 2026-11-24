@@ -69,14 +69,41 @@ GOLD: tuple[Instrument, ...] = (
     Instrument("us05y",  "TVC:US05Y",     "US 5Y Yield",  "Yield",    9),
 )
 
+# Complete 15-minute commodity and financial market research input list.
+# Provider quotes are *proxies*; the Kalshi contracts settle against their
+# published Pyth references. Slot colors repeat for this headless collection.
+# Each symbol must pass the live freshness check before use.
+MARKETS15: tuple[Instrument, ...] = (
+    Instrument("gold",      "OANDA:XAUUSD",     "Gold Spot",         "Commodity",  1),
+    Instrument("silver",    "OANDA:XAGUSD",     "Silver Spot",       "Commodity",  2),
+    Instrument("platinum",  "OANDA:XPTUSD",     "Platinum Spot",     "Commodity",  3),
+    Instrument("palladium", "OANDA:XPDUSD",     "Palladium Spot",    "Commodity",  4),
+    Instrument("copper",    "OANDA:XCUUSD",     "Copper Spot",       "Commodity",  5),
+    Instrument("wti",       "OANDA:WTICOUSD",   "WTI Oil CFD",       "Commodity",  6),
+    Instrument("brent",     "OANDA:BCOUSD",     "Brent Oil CFD",     "Commodity",  7),
+    Instrument("natgas",    "OANDA:NATGASUSD",  "Natural Gas CFD",   "Commodity",  8),
+    Instrument("eurusd",    "FX:EURUSD",        "EUR/USD",           "Forex",      1),
+    Instrument("gbpusd",    "FX:GBPUSD",        "GBP/USD",           "Forex",      2),
+    Instrument("usdjpy",    "FX:USDJPY",        "USD/JPY",           "Forex",      3),
+    Instrument("audusd",    "FX:AUDUSD",        "AUD/USD",           "Forex",      4),
+    Instrument("usdcad",    "FX:USDCAD",        "USD/CAD",           "Forex",      5),
+    Instrument("usdmxn",    "OANDA:USDMXN",     "USD/MXN",           "Forex",      6),
+    Instrument("us02y",     "TVC:US02Y",        "US 2Y Yield",       "Rates",      1),
+    Instrument("us05y",     "TVC:US05Y",        "US 5Y Yield",       "Rates",      2),
+    Instrument("us10y",     "TVC:US10Y",        "US 10Y Yield",      "Rates",      3),
+    Instrument("us30y",     "TVC:US30Y",        "US 30Y Yield",      "Rates",      4),
+    Instrument("dxy",       "TVC:DXY",          "US Dollar Index",   "FX/Index",   5),
+)
+
 WATCHLIST_NOTES = {
     "realtime": "spot metals and cash index - real time, no exchange delay",
     "futures": "COMEX/CME contracts - 10 min delayed without a data subscription",
     "gold": "gold plus the high-priority silver, AUDUSD and 2Y/5Y yield candidates; check price age and usable flags",
+    "markets15": "unified 15-minute commodities and financials price proxies; not Kalshi settlement",
 }
 
 WATCHLIST = REALTIME       # default
-WATCHLISTS = {"realtime": REALTIME, "futures": FUTURES, "gold": GOLD}
+WATCHLISTS = {"realtime": REALTIME, "futures": FUTURES, "gold": GOLD, "markets15": MARKETS15}
 
 BY_SYMBOL = {i.symbol: i for i in WATCHLIST}
 BY_KEY = {i.key: i for i in WATCHLIST}
