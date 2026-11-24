@@ -131,12 +131,14 @@ endpoint while keeping the original `--watchlist gold` intact:
 .\.venv\Scripts\python.exe -m tvscraper serve --watchlist markets15
 ```
 
-The same localhost JSON/SSE endpoint includes a deduplicated set of 19 keys:
-eight commodities (`gold`, `silver`, `platinum`, `palladium`,
+The localhost JSON/SSE endpoint contains **20 price inputs**: eight
+commodities (`gold`, `silver`, `platinum`, `palladium`,
 `copper`, `wti`, `brent`, `natgas`), six forex pairs
 (`eurusd`, `gbpusd`, `usdjpy`, `audusd`, `usdcad`, `usdmxn`),
-four Treasury yields (`us02y`, `us05y`, `us10y`, `us30y`) and
-`dxy` as a contextual USD signal. Commodity CFD prices are **not** Kalshi
+four Treasury yields (`us02y`, `us05y`, `us10y`, `us30y`),
+`sp500` and a contextual USD index `dxy`. Of these, 19 are mapped to
+Kalshi 15-minute Commodities/Financials series in the KalshiBot collector;
+DXY is contextual only. Commodity CFD prices are **not** Kalshi
 Pyth settlement prices, and all unverified symbols should be treated as
 candidates until their actual feed timestamps and update modes are checked.
 Any missing, delayed, or stale series is marked unavailable, never voted.
